@@ -77,7 +77,7 @@
 
     <section class="controls-panel">
       {#if params}
-        <ColorSpaceSelector config={params.color_management} />
+        <ColorSpaceSelector {params} />
         <ColorWheels {params} />
         <PrimaryBars {params} />
         <Sliders {params} />

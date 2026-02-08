@@ -1,7 +1,8 @@
 <script lang="ts">
-  import type { ColorManagementConfig } from '$lib/types';
+  import type { GradingParams, ColorManagementConfig } from '$lib/types';
+  import { bridge } from '$lib/bridge';
 
-  let { config }: { config: ColorManagementConfig } = $props();
+  let { params }: { params: GradingParams } = $props();
 
   const colorSpaces = [
     'Aces2065_1',
@@ -36,14 +37,9 @@
   };
 
   function updateSpace(field: keyof ColorManagementConfig, value: string) {
-    // We send a full params update with the new color management config.
-    // Since we only have the config prop, we construct a minimal update.
-    // The backend will merge this with the current params.
-    const newConfig = { ...config, [field]: value };
-    // NOTE: In a full implementation, we'd need access to full params here.
-    // For now, we log the intent. The parent App.svelte should pass the
-    // full params and handle the update.
-    console.warn('ColorSpaceSelector: would update', field, 'to', value, newConfig);
+    const updated = structuredClone(params);
+    updated.color_management[field] = value;
+    bridge.setParams(updated);
   }
 </script>
 
@@ -53,7 +49,7 @@
     <label>
       <span>Input</span>
       <select
-        value={config.input_space}
+        value={params.color_management.input_space}
         onchange={(e) => updateSpace('input_space', (e.target as HTMLSelectElement).value)}
       >
         {#each colorSpaces as cs}
@@ -66,7 +62,7 @@
     <label>
       <span>Working</span>
       <select
-        value={config.working_space}
+        value={params.color_management.working_space}
         onchange={(e) => updateSpace('working_space', (e.target as HTMLSelectElement).value)}
       >
         {#each colorSpaces as cs}
@@ -79,7 +75,7 @@
     <label>
       <span>Output</span>
       <select
-        value={config.output_space}
+        value={params.color_management.output_space}
         onchange={(e) => updateSpace('output_space', (e.target as HTMLSelectElement).value)}
       >
         {#each colorSpaces as cs}
