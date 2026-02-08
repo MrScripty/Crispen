@@ -5,6 +5,8 @@ use crispen_core::image::GradingImage;
 use crispen_core::scopes::{CieData, HistogramData, VectorscopeData, WaveformData};
 use crispen_core::transform::lut::Lut3D;
 use crispen_core::transform::params::GradingParams;
+use crispen_gpu::pipeline::GpuGradingPipeline;
+use crispen_gpu::GpuImageHandle;
 
 /// Bevy resource holding the current grading parameters.
 ///
@@ -66,4 +68,16 @@ impl Default for ScopeConfig {
             cie_visible: false,
         }
     }
+}
+
+/// Bevy resource holding the GPU grading pipeline and uploaded source image.
+///
+/// Created once at startup via `GpuGradingPipeline::create_blocking()`.
+/// Systems use this to bake LUTs, apply grading, and read back results.
+#[derive(Resource)]
+pub struct GpuPipelineState {
+    /// The GPU compute pipeline for LUT baking, application, and scopes.
+    pub pipeline: GpuGradingPipeline,
+    /// Handle to the source image uploaded to the GPU (None until first load).
+    pub source_handle: Option<GpuImageHandle>,
 }

@@ -13,7 +13,7 @@ use crispen_core::transform::params::GradingParams;
 use crate::events::{
     ColorGradingCommand, ImageLoadedEvent, ParamsUpdatedEvent, ScopeDataReadyEvent,
 };
-use crate::resources::{GradingState, ImageState, ScopeConfig, ScopeState};
+use crate::resources::{GpuPipelineState, GradingState, ImageState, ScopeConfig, ScopeState};
 
 /// Process inbound grading commands from the UI.
 ///
@@ -94,20 +94,42 @@ pub fn detect_param_changes(state: Res<GradingState>) {
     }
 }
 
-/// Re-bake the 3D LUT when params are dirty.
+/// Re-bake the 3D LUT on the GPU and apply to the source image when params are dirty.
 ///
-/// Phase 1 guard: only bakes if a LUT already exists (which it won't
-/// until the GPU pipeline or explicit LUT load creates one). This
-/// avoids hitting crispen-core's `todo!()` stubs at runtime.
-pub fn rebake_lut_if_dirty(mut state: ResMut<GradingState>) {
+/// Dispatches GPU compute for LUT baking and image grading, then reads
+/// back the graded image for CPU scope computation.
+pub fn rebake_lut_if_dirty(
+    mut state: ResMut<GradingState>,
+    mut images: ResMut<ImageState>,
+    gpu: Option<ResMut<GpuPipelineState>>,
+) {
     if !state.dirty {
         return;
     }
 
-    let params = state.params.clone();
-    if let Some(ref mut lut) = state.lut {
-        lut.bake(&params);
-    }
+    let Some(mut gpu) = gpu else {
+        // No GPU pipeline available — clear dirty flag to avoid spinning.
+        state.dirty = false;
+        return;
+    };
+
+    // Dereference ResMut to enable split borrows on struct fields.
+    let gpu = &mut *gpu;
+
+    let Some(ref source_handle) = gpu.source_handle else {
+        // No source image uploaded yet — nothing to grade.
+        state.dirty = false;
+        return;
+    };
+
+    // GPU bake LUT + apply to source image.
+    gpu.pipeline.bake_lut(&state.params, 65);
+    gpu.pipeline.apply_lut(source_handle);
+
+    // Readback graded image for CPU scope computation.
+    let output = gpu.pipeline.current_output().expect("output exists after apply_lut");
+    let graded = gpu.pipeline.download_image(output);
+    images.graded = Some(graded);
 
     state.dirty = false;
 }

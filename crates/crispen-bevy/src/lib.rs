@@ -10,25 +10,32 @@ pub mod scope_render;
 pub mod systems;
 
 use bevy::prelude::*;
+use crispen_gpu::GpuGradingPipeline;
 
-use resources::{GradingState, ImageState, ScopeConfig, ScopeState};
+use events::{ColorGradingCommand, ImageLoadedEvent, ParamsUpdatedEvent, ScopeDataReadyEvent};
+use resources::{GradingState, GpuPipelineState, ImageState, ScopeConfig, ScopeState};
 use systems::{detect_param_changes, handle_grading_commands, rebake_lut_if_dirty, update_scopes};
 
 /// Main Bevy plugin for the Crispen color grading pipeline.
 ///
 /// Registers resources, events, and systems for:
 /// - Managing `GradingParams` as a Bevy resource
-/// - Triggering LUT re-bake on parameter changes
+/// - Triggering LUT re-bake on parameter changes via GPU
 /// - Running scope computation when a graded image is available
-/// - Integrating with Bevy's render graph (Phase 2)
+/// - GPU pipeline creation at startup
 pub struct CrispenPlugin;
 
 impl Plugin for CrispenPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<GradingState>()
+        app.add_message::<ColorGradingCommand>()
+            .add_message::<ParamsUpdatedEvent>()
+            .add_message::<ImageLoadedEvent>()
+            .add_message::<ScopeDataReadyEvent>()
+            .init_resource::<GradingState>()
             .init_resource::<ImageState>()
             .init_resource::<ScopeState>()
             .init_resource::<ScopeConfig>()
+            .add_systems(Startup, init_gpu_pipeline)
             .add_systems(
                 Update,
                 (
@@ -38,5 +45,22 @@ impl Plugin for CrispenPlugin {
                     detect_param_changes,
                 ),
             );
+    }
+}
+
+/// Startup system: create the GPU grading pipeline and insert as a resource.
+fn init_gpu_pipeline(mut commands: Commands) {
+    match GpuGradingPipeline::create_blocking() {
+        Ok(pipeline) => {
+            tracing::info!("GPU grading pipeline initialized");
+            commands.insert_resource(GpuPipelineState {
+                pipeline,
+                source_handle: None,
+            });
+        }
+        Err(e) => {
+            tracing::error!("Failed to initialize GPU grading pipeline: {e}");
+            tracing::warn!("Grading will not function without a GPU pipeline");
+        }
     }
 }
