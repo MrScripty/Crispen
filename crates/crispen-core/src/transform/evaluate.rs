@@ -77,7 +77,8 @@ mod tests {
             assert!(
                 (result[i] - rgb[i]).abs() < EPSILON,
                 "channel {i}: {:.8} vs {:.8}",
-                result[i], rgb[i]
+                result[i],
+                rgb[i]
             );
         }
     }

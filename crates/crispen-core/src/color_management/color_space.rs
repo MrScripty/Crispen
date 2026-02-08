@@ -33,11 +33,7 @@ pub struct ColorMatrix(pub Mat3);
 
 impl ColorMatrix {
     /// Identity matrix — no-op transform.
-    pub const IDENTITY: Self = Self([
-        [1.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0],
-        [0.0, 0.0, 1.0],
-    ]);
+    pub const IDENTITY: Self = Self([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]);
 
     /// Apply this matrix to an RGB triplet.
     ///
@@ -116,43 +112,73 @@ const D65_WHITE: [f64; 2] = [0.3127, 0.3290];
 const ACES_WHITE: [f64; 2] = [0.32168, 0.33767];
 
 const REC709: Chromaticity = Chromaticity {
-    r: [0.6400, 0.3300], g: [0.3000, 0.6000], b: [0.1500, 0.0600], w: D65_WHITE,
+    r: [0.6400, 0.3300],
+    g: [0.3000, 0.6000],
+    b: [0.1500, 0.0600],
+    w: D65_WHITE,
 };
 
 const AP0: Chromaticity = Chromaticity {
-    r: [0.73470, 0.26530], g: [0.00000, 1.00000], b: [0.00010, -0.07700], w: ACES_WHITE,
+    r: [0.73470, 0.26530],
+    g: [0.00000, 1.00000],
+    b: [0.00010, -0.07700],
+    w: ACES_WHITE,
 };
 
 const AP1: Chromaticity = Chromaticity {
-    r: [0.71300, 0.29300], g: [0.16500, 0.83000], b: [0.12800, 0.04400], w: ACES_WHITE,
+    r: [0.71300, 0.29300],
+    g: [0.16500, 0.83000],
+    b: [0.12800, 0.04400],
+    w: ACES_WHITE,
 };
 
 const REC2020: Chromaticity = Chromaticity {
-    r: [0.70800, 0.29200], g: [0.17000, 0.79700], b: [0.13100, 0.04600], w: D65_WHITE,
+    r: [0.70800, 0.29200],
+    g: [0.17000, 0.79700],
+    b: [0.13100, 0.04600],
+    w: D65_WHITE,
 };
 
 const DISPLAY_P3: Chromaticity = Chromaticity {
-    r: [0.68000, 0.32000], g: [0.26500, 0.69000], b: [0.15000, 0.06000], w: D65_WHITE,
+    r: [0.68000, 0.32000],
+    g: [0.26500, 0.69000],
+    b: [0.15000, 0.06000],
+    w: D65_WHITE,
 };
 
 const ARRI_WG3: Chromaticity = Chromaticity {
-    r: [0.68400, 0.31300], g: [0.22100, 0.84800], b: [0.08610, -0.10200], w: D65_WHITE,
+    r: [0.68400, 0.31300],
+    g: [0.22100, 0.84800],
+    b: [0.08610, -0.10200],
+    w: D65_WHITE,
 };
 
 const ARRI_WG4: Chromaticity = Chromaticity {
-    r: [0.73470, 0.26530], g: [0.14240, 0.85760], b: [0.09910, -0.03080], w: D65_WHITE,
+    r: [0.73470, 0.26530],
+    g: [0.14240, 0.85760],
+    b: [0.09910, -0.03080],
+    w: D65_WHITE,
 };
 
 const S_GAMUT3_CINE: Chromaticity = Chromaticity {
-    r: [0.76600, 0.27500], g: [0.22500, 0.80000], b: [0.08900, -0.08700], w: D65_WHITE,
+    r: [0.76600, 0.27500],
+    g: [0.22500, 0.80000],
+    b: [0.08900, -0.08700],
+    w: D65_WHITE,
 };
 
 const RED_WIDE_GAMUT: Chromaticity = Chromaticity {
-    r: [0.78010, 0.30490], g: [0.12120, 1.49310], b: [0.09530, -0.08490], w: D65_WHITE,
+    r: [0.78010, 0.30490],
+    g: [0.12120, 1.49310],
+    b: [0.09530, -0.08490],
+    w: D65_WHITE,
 };
 
 const V_GAMUT: Chromaticity = Chromaticity {
-    r: [0.73000, 0.28000], g: [0.16500, 0.84000], b: [0.10000, -0.03000], w: D65_WHITE,
+    r: [0.73000, 0.28000],
+    g: [0.16500, 0.84000],
+    b: [0.10000, -0.03000],
+    w: D65_WHITE,
 };
 
 // ---------------------------------------------------------------------------
@@ -215,8 +241,16 @@ const BRADFORD_INV: Mat3 = [
 /// # Reference
 /// Lindbloom, Bruce J. "Chromatic Adaptation"
 fn bradford_adaptation(src_xy: [f64; 2], dst_xy: [f64; 2]) -> Mat3 {
-    let src_xyz = [src_xy[0] / src_xy[1], 1.0, (1.0 - src_xy[0] - src_xy[1]) / src_xy[1]];
-    let dst_xyz = [dst_xy[0] / dst_xy[1], 1.0, (1.0 - dst_xy[0] - dst_xy[1]) / dst_xy[1]];
+    let src_xyz = [
+        src_xy[0] / src_xy[1],
+        1.0,
+        (1.0 - src_xy[0] - src_xy[1]) / src_xy[1],
+    ];
+    let dst_xyz = [
+        dst_xy[0] / dst_xy[1],
+        1.0,
+        (1.0 - dst_xy[0] - dst_xy[1]) / dst_xy[1],
+    ];
 
     let src_cone = mat3_vec3_mul(&BRADFORD, src_xyz);
     let dst_cone = mat3_vec3_mul(&BRADFORD, dst_xyz);
@@ -338,7 +372,9 @@ mod tests {
             assert!(
                 (a[i] - b[i]).abs() < eps,
                 "channel {i}: {:.8} vs {:.8} (diff {:.8})",
-                a[i], b[i], (a[i] - b[i]).abs()
+                a[i],
+                b[i],
+                (a[i] - b[i]).abs()
             );
         }
     }
@@ -408,7 +444,8 @@ mod tests {
                 assert!(
                     (npm[i][j] - published[i][j]).abs() < 1e-6,
                     "NPM[{i}][{j}]: {:.10} vs {:.10}",
-                    npm[i][j], published[i][j]
+                    npm[i][j],
+                    published[i][j]
                 );
             }
         }

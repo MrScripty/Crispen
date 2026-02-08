@@ -39,7 +39,7 @@ pub enum ColorSpaceId {
 }
 
 /// Configuration for color space transforms in the grading pipeline.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ColorManagementConfig {
     /// Input color space of the source image.
     pub input_space: ColorSpaceId,
@@ -61,7 +61,7 @@ impl Default for ColorManagementConfig {
 
 /// Every tool writes here. The LUT bake shader reads the full struct.
 /// This is the immutable contract between UI, Bevy, and GPU.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GradingParams {
     /// Color management configuration.
     pub color_management: ColorManagementConfig,

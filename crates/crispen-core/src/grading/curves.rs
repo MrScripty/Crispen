@@ -110,7 +110,9 @@ fn catmull_rom(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
 /// Empty control points produce an identity LUT.
 pub fn bake_curve_to_1d_lut(control_points: &[[f32; 2]], size: usize) -> Vec<f32> {
     if control_points.is_empty() || size == 0 {
-        return (0..size).map(|i| i as f32 / (size - 1).max(1) as f32).collect();
+        return (0..size)
+            .map(|i| i as f32 / (size - 1).max(1) as f32)
+            .collect();
     }
 
     let evaluator = CurveEvaluator {
@@ -152,7 +154,9 @@ pub fn apply_curves(rgb: [f32; 3], params: &GradingParams) -> [f32; 3] {
 
     // Hue-vs-hue: rotate hue based on input hue
     if !params.hue_vs_hue.is_empty() {
-        let eval = CurveEvaluator { control_points: params.hue_vs_hue.clone() };
+        let eval = CurveEvaluator {
+            control_points: params.hue_vs_hue.clone(),
+        };
         let hue_norm = hue / 360.0;
         let adjustment = eval.evaluate(hue_norm) - hue_norm;
         out_hue = (hue + adjustment * 360.0) % 360.0;
@@ -163,20 +167,26 @@ pub fn apply_curves(rgb: [f32; 3], params: &GradingParams) -> [f32; 3] {
 
     // Hue-vs-sat: adjust saturation based on input hue
     if !params.hue_vs_sat.is_empty() {
-        let eval = CurveEvaluator { control_points: params.hue_vs_sat.clone() };
+        let eval = CurveEvaluator {
+            control_points: params.hue_vs_sat.clone(),
+        };
         let hue_norm = hue / 360.0;
         sat_mult *= eval.evaluate(hue_norm) / hue_norm.max(1e-10);
     }
 
     // Lum-vs-sat: adjust saturation based on input luminance
     if !params.lum_vs_sat.is_empty() {
-        let eval = CurveEvaluator { control_points: params.lum_vs_sat.clone() };
+        let eval = CurveEvaluator {
+            control_points: params.lum_vs_sat.clone(),
+        };
         sat_mult *= eval.evaluate(lum) / lum.max(1e-10);
     }
 
     // Sat-vs-sat: adjust saturation based on input saturation
     if !params.sat_vs_sat.is_empty() {
-        let eval = CurveEvaluator { control_points: params.sat_vs_sat.clone() };
+        let eval = CurveEvaluator {
+            control_points: params.sat_vs_sat.clone(),
+        };
         sat_mult *= eval.evaluate(sat) / sat.max(1e-10);
     }
 
@@ -241,8 +251,12 @@ fn hsl_to_rgb(hue: f32, sat: f32, lum: f32) -> [f32; 3] {
 }
 
 fn hue_to_rgb(p: f32, q: f32, mut t: f32) -> f32 {
-    if t < 0.0 { t += 1.0; }
-    if t > 1.0 { t -= 1.0; }
+    if t < 0.0 {
+        t += 1.0;
+    }
+    if t > 1.0 {
+        t -= 1.0;
+    }
     if t < 1.0 / 6.0 {
         p + (q - p) * 6.0 * t
     } else if t < 1.0 / 2.0 {
@@ -281,10 +295,14 @@ mod tests {
 
     #[test]
     fn test_curve_evaluator_fewer_than_two_points_is_identity() {
-        let eval = CurveEvaluator { control_points: vec![] };
+        let eval = CurveEvaluator {
+            control_points: vec![],
+        };
         assert!((eval.evaluate(0.5) - 0.5).abs() < EPSILON);
 
-        let eval = CurveEvaluator { control_points: vec![[0.5, 0.5]] };
+        let eval = CurveEvaluator {
+            control_points: vec![[0.5, 0.5]],
+        };
         assert!((eval.evaluate(0.3) - 0.3).abs() < EPSILON);
     }
 
@@ -312,7 +330,9 @@ mod tests {
         for i in 0..3 {
             assert!(
                 (original[i] - back[i]).abs() < 0.001,
-                "channel {i}: {:.6} vs {:.6}", original[i], back[i]
+                "channel {i}: {:.6} vs {:.6}",
+                original[i],
+                back[i]
             );
         }
     }

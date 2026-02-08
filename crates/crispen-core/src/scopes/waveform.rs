@@ -31,14 +31,14 @@ pub fn compute(image: &GradingImage) -> WaveformData {
     let height = DEFAULT_HEIGHT;
     let total = (width * height) as usize;
 
-    let mut data = [
-        vec![0u32; total],
-        vec![0u32; total],
-        vec![0u32; total],
-    ];
+    let mut data = [vec![0u32; total], vec![0u32; total], vec![0u32; total]];
 
     if width == 0 || image.height == 0 {
-        return WaveformData { width, height, data };
+        return WaveformData {
+            width,
+            height,
+            data,
+        };
     }
 
     let height_f = (height - 1) as f32;
@@ -58,7 +58,11 @@ pub fn compute(image: &GradingImage) -> WaveformData {
         }
     }
 
-    WaveformData { width, height, data }
+    WaveformData {
+        width,
+        height,
+        data,
+    }
 }
 
 #[cfg(test)]
@@ -69,7 +73,10 @@ mod tests {
     #[test]
     fn test_waveform_empty_image() {
         let image = GradingImage {
-            width: 0, height: 0, pixels: vec![], source_bit_depth: BitDepth::F32,
+            width: 0,
+            height: 0,
+            pixels: vec![],
+            source_bit_depth: BitDepth::F32,
         };
         let wf = compute(&image);
         assert_eq!(wf.width, 0);
@@ -79,7 +86,10 @@ mod tests {
     fn test_waveform_uniform_column_concentrates_at_one_row() {
         let pixels = vec![[0.5, 0.5, 0.5, 1.0]; 10];
         let image = GradingImage {
-            width: 1, height: 10, pixels, source_bit_depth: BitDepth::F32,
+            width: 1,
+            height: 10,
+            pixels,
+            source_bit_depth: BitDepth::F32,
         };
         let wf = compute(&image);
         // All pixels in column 0 at value 0.5 → one row should have count 10

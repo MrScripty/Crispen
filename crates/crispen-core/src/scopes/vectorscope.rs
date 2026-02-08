@@ -50,7 +50,10 @@ pub fn compute(image: &GradingImage) -> VectorscopeData {
         }
     }
 
-    VectorscopeData { resolution, density }
+    VectorscopeData {
+        resolution,
+        density,
+    }
 }
 
 #[cfg(test)]
@@ -62,7 +65,10 @@ mod tests {
     fn test_vectorscope_neutral_concentrates_at_center() {
         let pixels = vec![[0.5, 0.5, 0.5, 1.0]; 100];
         let image = GradingImage {
-            width: 10, height: 10, pixels, source_bit_depth: BitDepth::F32,
+            width: 10,
+            height: 10,
+            pixels,
+            source_bit_depth: BitDepth::F32,
         };
         let vs = compute(&image);
         // Neutral colors should cluster near the center of the grid
@@ -73,7 +79,10 @@ mod tests {
     #[test]
     fn test_vectorscope_empty_image() {
         let image = GradingImage {
-            width: 0, height: 0, pixels: vec![], source_bit_depth: BitDepth::F32,
+            width: 0,
+            height: 0,
+            pixels: vec![],
+            source_bit_depth: BitDepth::F32,
         };
         let vs = compute(&image);
         let total: u32 = vs.density.iter().sum();

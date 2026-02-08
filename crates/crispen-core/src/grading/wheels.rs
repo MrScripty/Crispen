@@ -44,9 +44,7 @@ pub fn apply_cdl(
         let combined_offset = offset[c] + offset[3];
         let combined_gamma = gamma[c] * gamma[3];
 
-        let x = rgb[c] * combined_gain
-            + combined_lift * (1.0 - combined_gain)
-            + combined_offset;
+        let x = rgb[c] * combined_gain + combined_lift * (1.0 - combined_gain) + combined_offset;
 
         // Clamp to zero before power to avoid NaN from negative bases
         let clamped = x.max(0.0);
@@ -68,17 +66,36 @@ mod tests {
 
     const EPSILON: f32 = 1e-6;
 
-    fn default_lift() -> [f32; 4] { [0.0, 0.0, 0.0, 0.0] }
-    fn default_gamma() -> [f32; 4] { [1.0, 1.0, 1.0, 1.0] }
-    fn default_gain() -> [f32; 4] { [1.0, 1.0, 1.0, 1.0] }
-    fn default_offset() -> [f32; 4] { [0.0, 0.0, 0.0, 0.0] }
+    fn default_lift() -> [f32; 4] {
+        [0.0, 0.0, 0.0, 0.0]
+    }
+    fn default_gamma() -> [f32; 4] {
+        [1.0, 1.0, 1.0, 1.0]
+    }
+    fn default_gain() -> [f32; 4] {
+        [1.0, 1.0, 1.0, 1.0]
+    }
+    fn default_offset() -> [f32; 4] {
+        [0.0, 0.0, 0.0, 0.0]
+    }
 
     #[test]
     fn test_cdl_identity_is_passthrough() {
         let rgb = [0.5, 0.3, 0.7];
-        let result = apply_cdl(rgb, &default_lift(), &default_gamma(), &default_gain(), &default_offset());
+        let result = apply_cdl(
+            rgb,
+            &default_lift(),
+            &default_gamma(),
+            &default_gain(),
+            &default_offset(),
+        );
         for i in 0..3 {
-            assert!((result[i] - rgb[i]).abs() < EPSILON, "channel {i}: {:.8} vs {:.8}", result[i], rgb[i]);
+            assert!(
+                (result[i] - rgb[i]).abs() < EPSILON,
+                "channel {i}: {:.8} vs {:.8}",
+                result[i],
+                rgb[i]
+            );
         }
     }
 
@@ -86,9 +103,20 @@ mod tests {
     fn test_cdl_gain_doubles_values() {
         let rgb = [0.25, 0.5, 0.125];
         let gain = [2.0, 2.0, 2.0, 1.0];
-        let result = apply_cdl(rgb, &default_lift(), &default_gamma(), &gain, &default_offset());
+        let result = apply_cdl(
+            rgb,
+            &default_lift(),
+            &default_gamma(),
+            &gain,
+            &default_offset(),
+        );
         for i in 0..3 {
-            assert!((result[i] - rgb[i] * 2.0).abs() < EPSILON, "channel {i}: {:.8} vs {:.8}", result[i], rgb[i] * 2.0);
+            assert!(
+                (result[i] - rgb[i] * 2.0).abs() < EPSILON,
+                "channel {i}: {:.8} vs {:.8}",
+                result[i],
+                rgb[i] * 2.0
+            );
         }
     }
 
@@ -96,7 +124,13 @@ mod tests {
     fn test_cdl_master_gain_scales_all_channels() {
         let rgb = [0.25, 0.5, 0.125];
         let gain = [1.0, 1.0, 1.0, 2.0];
-        let result = apply_cdl(rgb, &default_lift(), &default_gamma(), &gain, &default_offset());
+        let result = apply_cdl(
+            rgb,
+            &default_lift(),
+            &default_gamma(),
+            &gain,
+            &default_offset(),
+        );
         for i in 0..3 {
             assert!((result[i] - rgb[i] * 2.0).abs() < EPSILON);
         }
@@ -106,7 +140,13 @@ mod tests {
     fn test_cdl_offset_adds_to_output() {
         let rgb = [0.5, 0.5, 0.5];
         let offset = [0.1, 0.1, 0.1, 0.0];
-        let result = apply_cdl(rgb, &default_lift(), &default_gamma(), &default_gain(), &offset);
+        let result = apply_cdl(
+            rgb,
+            &default_lift(),
+            &default_gamma(),
+            &default_gain(),
+            &offset,
+        );
         for i in 0..3 {
             assert!((result[i] - 0.6).abs() < EPSILON);
         }
@@ -131,7 +171,13 @@ mod tests {
     fn test_cdl_negative_clamped_to_zero() {
         let rgb = [0.1, 0.1, 0.1];
         let offset = [-0.5, -0.5, -0.5, 0.0];
-        let result = apply_cdl(rgb, &default_lift(), &default_gamma(), &default_gain(), &offset);
+        let result = apply_cdl(
+            rgb,
+            &default_lift(),
+            &default_gamma(),
+            &default_gain(),
+            &offset,
+        );
         for i in 0..3 {
             assert!(result[i] >= 0.0, "output should never be negative");
         }

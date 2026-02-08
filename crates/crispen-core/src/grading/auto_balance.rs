@@ -82,7 +82,8 @@ pub fn match_shot(source: &GradingImage, reference: &GradingImage) -> GradingPar
 
     // Match offset from mean differences (after gain adjustment)
     for c in 0..3 {
-        let adjusted_mean = src_stats.mean[c] * ref_stats.stddev[c] / src_stats.stddev[c].max(1e-10);
+        let adjusted_mean =
+            src_stats.mean[c] * ref_stats.stddev[c] / src_stats.stddev[c].max(1e-10);
         params.offset[c] = (ref_stats.mean[c] - adjusted_mean) as f32;
     }
 
@@ -97,7 +98,7 @@ pub fn match_shot(source: &GradingImage, reference: &GradingImage) -> GradingPar
 }
 
 struct ChannelStats {
-    mean: [f64; 4],   // R, G, B, Luminance
+    mean: [f64; 4], // R, G, B, Luminance
     stddev: [f64; 4],
 }
 
@@ -152,7 +153,10 @@ mod tests {
     fn test_auto_balance_on_neutral_image_returns_zero() {
         let image = make_uniform_image(0.5, 0.5, 0.5, 10);
         let (temp, tint) = auto_white_balance(&image);
-        assert!(temp.abs() < 0.01, "temperature should be ~0 for neutral: {temp}");
+        assert!(
+            temp.abs() < 0.01,
+            "temperature should be ~0 for neutral: {temp}"
+        );
         assert!(tint.abs() < 0.01, "tint should be ~0 for neutral: {tint}");
     }
 
@@ -161,13 +165,19 @@ mod tests {
         // Warm image: more red than blue
         let image = make_uniform_image(0.7, 0.5, 0.3, 10);
         let (temp, _) = auto_white_balance(&image);
-        assert!(temp < 0.0, "warm image should produce negative temperature correction");
+        assert!(
+            temp < 0.0,
+            "warm image should produce negative temperature correction"
+        );
     }
 
     #[test]
     fn test_auto_balance_empty_image_returns_zero() {
         let image = GradingImage {
-            width: 0, height: 0, pixels: vec![], source_bit_depth: BitDepth::F32,
+            width: 0,
+            height: 0,
+            pixels: vec![],
+            source_bit_depth: BitDepth::F32,
         };
         let (temp, tint) = auto_white_balance(&image);
         assert_eq!(temp, 0.0);

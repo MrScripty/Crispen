@@ -69,7 +69,10 @@ pub fn compute(image: &GradingImage) -> CieData {
         }
     }
 
-    CieData { resolution, density }
+    CieData {
+        resolution,
+        density,
+    }
 }
 
 #[cfg(test)]
@@ -80,7 +83,10 @@ mod tests {
     #[test]
     fn test_cie_empty_image() {
         let image = GradingImage {
-            width: 0, height: 0, pixels: vec![], source_bit_depth: BitDepth::F32,
+            width: 0,
+            height: 0,
+            pixels: vec![],
+            source_bit_depth: BitDepth::F32,
         };
         let cie = compute(&image);
         let total: u32 = cie.density.iter().sum();
@@ -91,7 +97,10 @@ mod tests {
     fn test_cie_white_pixel_near_d65() {
         let pixels = vec![[1.0, 1.0, 1.0, 1.0]; 1];
         let image = GradingImage {
-            width: 1, height: 1, pixels, source_bit_depth: BitDepth::F32,
+            width: 1,
+            height: 1,
+            pixels,
+            source_bit_depth: BitDepth::F32,
         };
         let cie = compute(&image);
         let total: u32 = cie.density.iter().sum();
@@ -102,7 +111,10 @@ mod tests {
     fn test_cie_black_pixel_skipped() {
         let pixels = vec![[0.0, 0.0, 0.0, 1.0]; 10];
         let image = GradingImage {
-            width: 10, height: 1, pixels, source_bit_depth: BitDepth::F32,
+            width: 10,
+            height: 1,
+            pixels,
+            source_bit_depth: BitDepth::F32,
         };
         let cie = compute(&image);
         let total: u32 = cie.density.iter().sum();

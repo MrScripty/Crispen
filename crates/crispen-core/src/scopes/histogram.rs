@@ -46,7 +46,8 @@ pub fn compute(image: &GradingImage) -> HistogramData {
         bins[3][l_bin.min(NUM_BINS - 1)] += 1;
     }
 
-    let peak = bins.iter()
+    let peak = bins
+        .iter()
         .flat_map(|b| b.iter())
         .copied()
         .max()
@@ -64,7 +65,10 @@ mod tests {
     fn test_histogram_bins_sum_to_pixel_count() {
         let pixels = vec![[0.5, 0.3, 0.7, 1.0]; 100];
         let image = GradingImage {
-            width: 10, height: 10, pixels, source_bit_depth: BitDepth::F32,
+            width: 10,
+            height: 10,
+            pixels,
+            source_bit_depth: BitDepth::F32,
         };
         let hist = compute(&image);
         for ch in 0..4 {
@@ -77,7 +81,10 @@ mod tests {
     fn test_histogram_uniform_image_single_bin() {
         let pixels = vec![[0.5, 0.5, 0.5, 1.0]; 50];
         let image = GradingImage {
-            width: 10, height: 5, pixels, source_bit_depth: BitDepth::F32,
+            width: 10,
+            height: 5,
+            pixels,
+            source_bit_depth: BitDepth::F32,
         };
         let hist = compute(&image);
         // All pixels at 0.5 → bin 127 or 128
@@ -88,7 +95,10 @@ mod tests {
     #[test]
     fn test_histogram_empty_image() {
         let image = GradingImage {
-            width: 0, height: 0, pixels: vec![], source_bit_depth: BitDepth::F32,
+            width: 0,
+            height: 0,
+            pixels: vec![],
+            source_bit_depth: BitDepth::F32,
         };
         let hist = compute(&image);
         assert_eq!(hist.peak, 0);

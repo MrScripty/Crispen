@@ -103,11 +103,7 @@ fn mat3_vec3(m: [[f64; 3]; 3], v: [f64; 3]) -> [f64; 3] {
 }
 
 /// Compute M_INV * diag(s) * M in a single pass.
-fn compose_bradford(
-    m_inv: [[f64; 3]; 3],
-    s: [f64; 3],
-    m: [[f64; 3]; 3],
-) -> [[f64; 3]; 3] {
+fn compose_bradford(m_inv: [[f64; 3]; 3], s: [f64; 3], m: [[f64; 3]; 3]) -> [[f64; 3]; 3] {
     let sm = [
         [s[0] * m[0][0], s[0] * m[0][1], s[0] * m[0][2]],
         [s[1] * m[1][0], s[1] * m[1][1], s[1] * m[1][2]],
@@ -116,8 +112,7 @@ fn compose_bradford(
     let mut out = [[0.0; 3]; 3];
     for i in 0..3 {
         for j in 0..3 {
-            out[i][j] =
-                m_inv[i][0] * sm[0][j] + m_inv[i][1] * sm[1][j] + m_inv[i][2] * sm[2][j];
+            out[i][j] = m_inv[i][0] * sm[0][j] + m_inv[i][1] * sm[1][j] + m_inv[i][2] * sm[2][j];
         }
     }
     out

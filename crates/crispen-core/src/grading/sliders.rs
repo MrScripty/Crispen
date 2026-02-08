@@ -64,9 +64,7 @@ pub fn apply_shadows_highlights(rgb: [f32; 3], shadows: f32, highlights: f32) ->
         let shadow_weight = 1.0 - s;
         let highlight_weight = s;
 
-        out[c] = rgb[c]
-            + shadows * shadow_weight * 0.5
-            - highlights * highlight_weight * 0.5;
+        out[c] = rgb[c] + shadows * shadow_weight * 0.5 - highlights * highlight_weight * 0.5;
     }
     out
 }
@@ -85,12 +83,7 @@ pub fn apply_shadows_highlights(rgb: [f32; 3], shadows: f32, highlights: f32) ->
 /// ```
 ///
 /// `saturation = 1.0`, `hue = 0.0`, `luma_mix = 0.0` produce no change.
-pub fn apply_saturation_hue(
-    rgb: [f32; 3],
-    saturation: f32,
-    hue: f32,
-    luma_mix: f32,
-) -> [f32; 3] {
+pub fn apply_saturation_hue(rgb: [f32; 3], saturation: f32, hue: f32, luma_mix: f32) -> [f32; 3] {
     if (saturation - 1.0).abs() < 1e-7 && hue.abs() < 1e-7 {
         return rgb;
     }
@@ -158,7 +151,8 @@ mod tests {
             assert!(
                 (result[i] - pivot).abs() < EPSILON,
                 "channel {i}: {:.8} vs {:.8}",
-                result[i], pivot
+                result[i],
+                pivot
             );
         }
     }
@@ -214,7 +208,8 @@ mod tests {
             assert!(
                 (result[i] - rgb[i]).abs() < EPSILON,
                 "360° hue rotation should be identity: ch{i} {:.6} vs {:.6}",
-                result[i], rgb[i]
+                result[i],
+                rgb[i]
             );
         }
     }

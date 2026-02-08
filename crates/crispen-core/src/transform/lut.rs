@@ -95,16 +95,13 @@ impl Lut3D {
         let size_m1 = (size - 1) as f32;
 
         // Normalize input to [0, size-1] range
-        let r_norm = ((rgb[0] - self.domain_min[0])
-            / (self.domain_max[0] - self.domain_min[0]))
+        let r_norm = ((rgb[0] - self.domain_min[0]) / (self.domain_max[0] - self.domain_min[0]))
             .clamp(0.0, 1.0)
             * size_m1;
-        let g_norm = ((rgb[1] - self.domain_min[1])
-            / (self.domain_max[1] - self.domain_min[1]))
+        let g_norm = ((rgb[1] - self.domain_min[1]) / (self.domain_max[1] - self.domain_min[1]))
             .clamp(0.0, 1.0)
             * size_m1;
-        let b_norm = ((rgb[2] - self.domain_min[2])
-            / (self.domain_max[2] - self.domain_min[2]))
+        let b_norm = ((rgb[2] - self.domain_min[2]) / (self.domain_max[2] - self.domain_min[2]))
             .clamp(0.0, 1.0)
             * size_m1;
 
@@ -175,7 +172,8 @@ impl Lut3D {
             }
 
             if let Some(rest) = trimmed.strip_prefix("DOMAIN_MIN") {
-                let vals: Vec<f32> = rest.split_whitespace()
+                let vals: Vec<f32> = rest
+                    .split_whitespace()
                     .filter_map(|s| s.parse().ok())
                     .collect();
                 if vals.len() == 3 {
@@ -185,7 +183,8 @@ impl Lut3D {
             }
 
             if let Some(rest) = trimmed.strip_prefix("DOMAIN_MAX") {
-                let vals: Vec<f32> = rest.split_whitespace()
+                let vals: Vec<f32> = rest
+                    .split_whitespace()
                     .filter_map(|s| s.parse().ok())
                     .collect();
                 if vals.len() == 3 {
@@ -209,7 +208,8 @@ impl Lut3D {
             }
 
             // Data line: three floats
-            let vals: Vec<f32> = trimmed.split_whitespace()
+            let vals: Vec<f32> = trimmed
+                .split_whitespace()
                 .filter_map(|s| s.parse().ok())
                 .collect();
             if vals.len() >= 3 {
@@ -228,11 +228,19 @@ impl Lut3D {
         if data.len() != expected {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Expected {expected} entries for size {size}, got {}", data.len()),
+                format!(
+                    "Expected {expected} entries for size {size}, got {}",
+                    data.len()
+                ),
             ));
         }
 
-        Ok(Self { size, data, domain_min, domain_max })
+        Ok(Self {
+            size,
+            data,
+            domain_min,
+            domain_max,
+        })
     }
 
     /// Save this 3D LUT to an Iridas `.cube` file.
@@ -302,7 +310,8 @@ mod tests {
                         assert!(
                             (actual[c] - expected[c]).abs() < EPSILON,
                             "Mismatch at ({ri},{gi},{bi}) ch{c}: {:.8} vs {:.8}",
-                            actual[c], expected[c]
+                            actual[c],
+                            expected[c]
                         );
                     }
                 }
@@ -318,7 +327,10 @@ mod tests {
 
         let v1 = lut.apply([0.25, 0.25, 0.25]);
         let v2 = lut.apply([0.26, 0.25, 0.25]);
-        assert!((v1[0] - v2[0]).abs() < 0.05, "interpolation should be smooth");
+        assert!(
+            (v1[0] - v2[0]).abs() < 0.05,
+            "interpolation should be smooth"
+        );
     }
 
     #[test]
@@ -354,7 +366,8 @@ mod tests {
                 assert!(
                     (a[c] - b[c]).abs() < 1e-6,
                     "entry {i} ch{c}: {:.8} vs {:.8}",
-                    a[c], b[c]
+                    a[c],
+                    b[c]
                 );
             }
         }

@@ -39,7 +39,13 @@ pub fn compute(image: &GradingImage) -> ParadeData {
     let mut blue = vec![0u32; total];
 
     if width == 0 || image.height == 0 {
-        return ParadeData { width, height, red, green, blue };
+        return ParadeData {
+            width,
+            height,
+            red,
+            green,
+            blue,
+        };
     }
 
     let height_f = (height - 1) as f32;
@@ -61,7 +67,13 @@ pub fn compute(image: &GradingImage) -> ParadeData {
         }
     }
 
-    ParadeData { width, height, red, green, blue }
+    ParadeData {
+        width,
+        height,
+        red,
+        green,
+        blue,
+    }
 }
 
 #[cfg(test)]
@@ -72,7 +84,10 @@ mod tests {
     #[test]
     fn test_parade_empty_image() {
         let image = GradingImage {
-            width: 0, height: 0, pixels: vec![], source_bit_depth: BitDepth::F32,
+            width: 0,
+            height: 0,
+            pixels: vec![],
+            source_bit_depth: BitDepth::F32,
         };
         let pd = compute(&image);
         assert_eq!(pd.width, 0);
@@ -82,7 +97,10 @@ mod tests {
     fn test_parade_pixel_counts_match() {
         let pixels = vec![[0.3, 0.6, 0.9, 1.0]; 20];
         let image = GradingImage {
-            width: 4, height: 5, pixels, source_bit_depth: BitDepth::F32,
+            width: 4,
+            height: 5,
+            pixels,
+            source_bit_depth: BitDepth::F32,
         };
         let pd = compute(&image);
         let r_total: u32 = pd.red.iter().sum();
