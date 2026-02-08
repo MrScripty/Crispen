@@ -17,7 +17,8 @@ use bevy::prelude::*;
 pub struct CrispenUiPlugin;
 
 impl Plugin for CrispenUiPlugin {
-    fn build(&self, _app: &mut App) {
-        // Phase 2: register UI systems, spawn root layout, wire widget events.
+    fn build(&self, app: &mut App) {
+        app.add_plugins(color_wheel::ColorWheelPlugin);
+        // Phase 2: register layout, sync systems, viewer.
     }
 }
