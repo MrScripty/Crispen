@@ -5,15 +5,19 @@
 //! pushes new state back via outbound messages.
 
 use bevy::prelude::*;
+use std::time::Instant;
 
 use crispen_core::grading::auto_balance;
-use crispen_core::scopes::{cie, histogram, vectorscope, waveform};
 use crispen_core::transform::params::GradingParams;
+use crispen_gpu::ScopeResults;
 
 use crate::events::{
     ColorGradingCommand, ImageLoadedEvent, ParamsUpdatedEvent, ScopeDataReadyEvent,
 };
-use crate::resources::{GpuPipelineState, GradingState, ImageState, ScopeConfig, ScopeState};
+use crate::resources::{
+    GpuPipelineState, GradingState, ImageState, PipelinePerfStats, ScopeConfig, ScopeState,
+    ViewerData,
+};
 
 /// Process inbound grading commands from the UI.
 ///
@@ -28,34 +32,37 @@ pub fn handle_grading_commands(
     mut params_updated: MessageWriter<ParamsUpdatedEvent>,
     mut _image_loaded: MessageWriter<ImageLoadedEvent>,
 ) {
+    let mut pending_params_update: Option<GradingParams> = None;
+
     for cmd in commands.read() {
         match cmd {
             ColorGradingCommand::SetParams { params } => {
-                state.params = params.clone();
-                state.dirty = true;
-                params_updated.write(ParamsUpdatedEvent {
-                    params: params.clone(),
-                });
+                if state.params != *params {
+                    state.params = params.clone();
+                    state.dirty = true;
+                    pending_params_update = Some(state.params.clone());
+                }
             }
             ColorGradingCommand::AutoBalance => {
                 if let Some(ref source) = images.source {
                     let (temp, tint) = auto_balance::auto_white_balance(source);
-                    state.params.temperature = temp;
-                    state.params.tint = tint;
-                    state.dirty = true;
-                    params_updated.write(ParamsUpdatedEvent {
-                        params: state.params.clone(),
-                    });
+                    if state.params.temperature != temp || state.params.tint != tint {
+                        state.params.temperature = temp;
+                        state.params.tint = tint;
+                        state.dirty = true;
+                        pending_params_update = Some(state.params.clone());
+                    }
                 } else {
                     tracing::warn!("AutoBalance: no source image loaded");
                 }
             }
             ColorGradingCommand::ResetGrade => {
-                state.params = GradingParams::default();
-                state.dirty = true;
-                params_updated.write(ParamsUpdatedEvent {
-                    params: state.params.clone(),
-                });
+                let defaults = GradingParams::default();
+                if state.params != defaults {
+                    state.params = defaults;
+                    state.dirty = true;
+                    pending_params_update = Some(state.params.clone());
+                }
             }
             ColorGradingCommand::LoadImage { path } => {
                 // Actual loading handled by the demo app's image_loader.
@@ -77,13 +84,33 @@ pub fn handle_grading_commands(
                 scope_type,
                 visible,
             } => match scope_type.as_str() {
-                "histogram" => scope_config.histogram_visible = *visible,
-                "waveform" => scope_config.waveform_visible = *visible,
-                "vectorscope" => scope_config.vectorscope_visible = *visible,
-                "cie" => scope_config.cie_visible = *visible,
+                "histogram" => {
+                    if scope_config.histogram_visible != *visible {
+                        scope_config.histogram_visible = *visible;
+                    }
+                }
+                "waveform" => {
+                    if scope_config.waveform_visible != *visible {
+                        scope_config.waveform_visible = *visible;
+                    }
+                }
+                "vectorscope" => {
+                    if scope_config.vectorscope_visible != *visible {
+                        scope_config.vectorscope_visible = *visible;
+                    }
+                }
+                "cie" => {
+                    if scope_config.cie_visible != *visible {
+                        scope_config.cie_visible = *visible;
+                    }
+                }
                 other => tracing::warn!("Unknown scope type: {}", other),
             },
         }
+    }
+
+    if let Some(params) = pending_params_update {
+        params_updated.write(ParamsUpdatedEvent { params });
     }
 }
 
@@ -94,13 +121,12 @@ pub fn detect_param_changes(state: Res<GradingState>) {
     }
 }
 
-/// Re-bake the 3D LUT on the GPU and apply to the source image when params are dirty.
+/// Submit GPU work (bake + apply + scopes) when params are dirty. Non-blocking.
 ///
-/// Dispatches GPU compute for LUT baking and image grading, then reads
-/// back the graded image for CPU scope computation.
-pub fn rebake_lut_if_dirty(
+/// The actual results are consumed by [`consume_gpu_results`] on a subsequent frame.
+pub fn submit_gpu_work(
     mut state: ResMut<GradingState>,
-    mut images: ResMut<ImageState>,
+    mut perf: ResMut<PipelinePerfStats>,
     gpu: Option<ResMut<GpuPipelineState>>,
 ) {
     if !state.dirty {
@@ -108,59 +134,85 @@ pub fn rebake_lut_if_dirty(
     }
 
     let Some(mut gpu) = gpu else {
-        // No GPU pipeline available — clear dirty flag to avoid spinning.
         state.dirty = false;
         return;
     };
 
-    // Dereference ResMut to enable split borrows on struct fields.
     let gpu = &mut *gpu;
 
     let Some(ref source_handle) = gpu.source_handle else {
-        // No source image uploaded yet — nothing to grade.
         state.dirty = false;
         return;
     };
 
-    // GPU bake LUT + apply to source image.
-    gpu.pipeline.bake_lut(&state.params, 65);
-    gpu.pipeline.apply_lut(source_handle);
+    // Don't submit if the previous readback hasn't been consumed yet.
+    // Keep dirty=true so we retry next frame after consume frees the slot.
+    if gpu.pipeline.has_pending_readback() {
+        return;
+    }
 
-    // Readback graded image for CPU scope computation.
-    let output = gpu.pipeline.current_output().expect("output exists after apply_lut");
-    let graded = gpu.pipeline.download_image(output);
-    images.graded = Some(graded);
+    let submit_start = Instant::now();
+
+    // Non-blocking GPU submission: bake → apply → format convert → scopes → async readback.
+    gpu.pipeline
+        .submit_gpu_work(source_handle, &state.params, 65);
+
+    let submit_time = submit_start.elapsed();
+    perf.updates += 1;
+    perf.total_time = submit_time;
+
+    if submit_time >= perf.slow_update_threshold
+        || perf.last_log_at.elapsed().as_secs_f32() >= 1.0
+    {
+        tracing::info!(
+            "gpu submit: {:.2}ms (update #{})",
+            submit_time.as_secs_f64() * 1000.0,
+            perf.updates
+        );
+        perf.last_log_at = Instant::now();
+    }
 
     state.dirty = false;
 }
 
-/// Compute scope data from the graded image.
+/// Non-blocking: poll for async GPU readback results and update viewer + scopes.
 ///
-/// Phase 1 guard: only runs when a graded image exists (which it won't
-/// until the full LUT apply pipeline works). Calls into crispen-core
-/// scope functions that are `todo!()` stubs.
-pub fn update_scopes(
-    images: Res<ImageState>,
-    scope_config: Res<ScopeConfig>,
+/// Runs every frame. If no results are ready yet, returns immediately.
+pub fn consume_gpu_results(
+    mut viewer_data: ResMut<ViewerData>,
     mut scope_state: ResMut<ScopeState>,
     mut scope_ready: MessageWriter<ScopeDataReadyEvent>,
+    gpu: Option<ResMut<GpuPipelineState>>,
 ) {
-    let Some(ref graded) = images.graded else {
+    let Some(mut gpu) = gpu else {
         return;
     };
 
-    if scope_config.histogram_visible {
-        scope_state.histogram = Some(histogram::compute(graded));
-    }
-    if scope_config.waveform_visible {
-        scope_state.waveform = Some(waveform::compute(graded));
-    }
-    if scope_config.vectorscope_visible {
-        scope_state.vectorscope = Some(vectorscope::compute(graded));
-    }
-    if scope_config.cie_visible {
-        scope_state.cie = Some(cie::compute(graded));
-    }
+    let Some(result) = gpu.pipeline.try_consume_readback() else {
+        return;
+    };
 
-    scope_ready.write(ScopeDataReadyEvent);
+    viewer_data.pixel_bytes = result.viewer_bytes;
+    viewer_data.width = result.width;
+    viewer_data.height = result.height;
+    viewer_data.format = result.format;
+
+    if let Some(results) = result.scopes {
+        apply_scope_results(&mut scope_state, results);
+        scope_ready.write(ScopeDataReadyEvent);
+    }
+}
+
+fn apply_scope_results(scope_state: &mut ScopeState, results: ScopeResults) {
+    let ScopeResults {
+        histogram,
+        waveform,
+        vectorscope,
+        cie,
+    } = results;
+
+    scope_state.histogram = Some(histogram);
+    scope_state.waveform = Some(waveform);
+    scope_state.vectorscope = Some(vectorscope);
+    scope_state.cie = Some(cie);
 }

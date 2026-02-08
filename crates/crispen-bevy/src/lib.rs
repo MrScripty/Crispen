@@ -12,9 +12,15 @@ pub mod systems;
 use bevy::prelude::*;
 use crispen_gpu::GpuGradingPipeline;
 
+// Re-export for downstream crates.
+pub use crispen_gpu::ViewerFormat;
+
 use events::{ColorGradingCommand, ImageLoadedEvent, ParamsUpdatedEvent, ScopeDataReadyEvent};
-use resources::{GradingState, GpuPipelineState, ImageState, ScopeConfig, ScopeState};
-use systems::{detect_param_changes, handle_grading_commands, rebake_lut_if_dirty, update_scopes};
+use resources::{
+    GpuPipelineState, GradingState, ImageState, PipelinePerfStats, ScopeConfig, ScopeState,
+    ViewerData,
+};
+use systems::{consume_gpu_results, detect_param_changes, handle_grading_commands, submit_gpu_work};
 
 /// Main Bevy plugin for the Crispen color grading pipeline.
 ///
@@ -33,15 +39,17 @@ impl Plugin for CrispenPlugin {
             .add_message::<ScopeDataReadyEvent>()
             .init_resource::<GradingState>()
             .init_resource::<ImageState>()
+            .init_resource::<ViewerData>()
             .init_resource::<ScopeState>()
             .init_resource::<ScopeConfig>()
+            .init_resource::<PipelinePerfStats>()
             .add_systems(Startup, init_gpu_pipeline)
             .add_systems(
                 Update,
                 (
                     handle_grading_commands,
-                    rebake_lut_if_dirty.after(handle_grading_commands),
-                    update_scopes.after(rebake_lut_if_dirty),
+                    consume_gpu_results.after(handle_grading_commands),
+                    submit_gpu_work.after(consume_gpu_results),
                     detect_param_changes,
                 ),
             );

@@ -5,8 +5,10 @@ use crispen_core::image::GradingImage;
 use crispen_core::scopes::{CieData, HistogramData, VectorscopeData, WaveformData};
 use crispen_core::transform::lut::Lut3D;
 use crispen_core::transform::params::GradingParams;
-use crispen_gpu::pipeline::GpuGradingPipeline;
 use crispen_gpu::GpuImageHandle;
+use crispen_gpu::ViewerFormat;
+use crispen_gpu::pipeline::GpuGradingPipeline;
+use std::time::{Duration, Instant};
 
 /// Bevy resource holding the current grading parameters.
 ///
@@ -32,13 +34,38 @@ impl Default for GradingState {
     }
 }
 
-/// Bevy resource holding the source and graded images.
+/// Bevy resource holding the source image.
 #[derive(Resource, Default)]
 pub struct ImageState {
     /// The original source image (None until loaded).
     pub source: Option<GradingImage>,
-    /// The graded output image (None until first LUT apply).
-    pub graded: Option<GradingImage>,
+}
+
+/// Raw pixel bytes for the viewer, produced by the GPU pipeline.
+///
+/// Contains either f16 or f32 linear-light data ready to be written
+/// directly into a Bevy `Image` asset with the matching `TextureFormat`.
+#[derive(Resource)]
+pub struct ViewerData {
+    /// Raw pixel bytes (f16 or f32 depending on `format`).
+    pub pixel_bytes: Vec<u8>,
+    /// Image width in pixels.
+    pub width: u32,
+    /// Image height in pixels.
+    pub height: u32,
+    /// The pixel format of `pixel_bytes`.
+    pub format: ViewerFormat,
+}
+
+impl Default for ViewerData {
+    fn default() -> Self {
+        Self {
+            pixel_bytes: Vec::new(),
+            width: 0,
+            height: 0,
+            format: ViewerFormat::F16,
+        }
+    }
 }
 
 /// Bevy resource holding the latest scope computation results.
@@ -62,11 +89,21 @@ pub struct ScopeConfig {
 impl Default for ScopeConfig {
     fn default() -> Self {
         Self {
-            histogram_visible: true,
-            waveform_visible: true,
+            histogram_visible: false,
+            waveform_visible: false,
             vectorscope_visible: false,
             cie_visible: false,
         }
+    }
+}
+
+impl ScopeConfig {
+    /// Whether any scope computation should run.
+    pub fn any_visible(&self) -> bool {
+        self.histogram_visible
+            || self.waveform_visible
+            || self.vectorscope_visible
+            || self.cie_visible
     }
 }
 
@@ -80,4 +117,30 @@ pub struct GpuPipelineState {
     pub pipeline: GpuGradingPipeline,
     /// Handle to the source image uploaded to the GPU (None until first load).
     pub source_handle: Option<GpuImageHandle>,
+}
+
+/// Runtime timings for the grading pipeline.
+#[derive(Resource)]
+pub struct PipelinePerfStats {
+    pub updates: u64,
+    pub bake_time: Duration,
+    pub apply_time: Duration,
+    pub readback_time: Duration,
+    pub total_time: Duration,
+    pub slow_update_threshold: Duration,
+    pub last_log_at: Instant,
+}
+
+impl Default for PipelinePerfStats {
+    fn default() -> Self {
+        Self {
+            updates: 0,
+            bake_time: Duration::ZERO,
+            apply_time: Duration::ZERO,
+            readback_time: Duration::ZERO,
+            total_time: Duration::ZERO,
+            slow_update_threshold: Duration::from_millis(10),
+            last_log_at: Instant::now(),
+        }
+    }
 }
