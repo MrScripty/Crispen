@@ -18,7 +18,21 @@ pub struct CrispenUiPlugin;
 
 impl Plugin for CrispenUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(color_wheel::ColorWheelPlugin);
-        // Phase 2: register layout, sync systems, viewer.
+        app.add_plugins(color_wheel::ColorWheelPlugin)
+            .add_systems(
+                Startup,
+                (viewer::setup_viewer, layout::spawn_root_layout).chain(),
+            )
+            .add_systems(
+                Update,
+                (
+                    systems::sync_sliders_to_params,
+                    systems::sync_params_to_sliders,
+                    systems::sync_params_to_wheels,
+                    components::update_param_slider_visuals,
+                    viewer::update_viewer_texture,
+                ),
+            )
+            .add_observer(systems::on_wheel_value_change);
     }
 }
