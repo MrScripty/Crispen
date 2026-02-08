@@ -34,6 +34,32 @@ pub struct GpuGradingPipeline {
 }
 
 impl GpuGradingPipeline {
+    /// Create a GPU pipeline by requesting a new wgpu adapter and device.
+    ///
+    /// Blocks on async wgpu calls via `pollster`. Call this once at startup
+    /// (e.g. from a Bevy startup system) and store the result as a resource.
+    pub fn create_blocking() -> Result<Self, String> {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::HighPerformance,
+            compatible_surface: None,
+            force_fallback_adapter: false,
+        }))
+        .map_err(|e| format!("no suitable GPU adapter found: {e}"))?;
+
+        let (device, queue) = pollster::block_on(adapter.request_device(
+            &wgpu::DeviceDescriptor {
+                label: Some("crispen_compute_device"),
+                required_features: required_features(),
+                required_limits: wgpu::Limits::default(),
+                ..Default::default()
+            },
+        ))
+        .map_err(|e| format!("failed to create GPU device: {e}"))?;
+
+        Ok(Self::new(Arc::new(device), Arc::new(queue)))
+    }
+
     /// Create the full GPU pipeline. Compiles all shaders.
     pub fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) -> Self {
         let lut_baker = LutBaker::new(&device, &queue);

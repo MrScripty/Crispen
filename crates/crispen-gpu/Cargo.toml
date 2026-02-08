@@ -10,8 +10,6 @@ wgpu = { workspace = true }
 bytemuck = { workspace = true }
 tracing = { workspace = true }
 parking_lot = { workspace = true }
-
-[dev-dependencies]
 pollster = "0.4"
 
 [lints]
