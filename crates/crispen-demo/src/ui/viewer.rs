@@ -36,23 +36,65 @@ pub fn setup_viewer(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     });
 }
 
-/// Spawn the viewer `ImageNode` inside the given parent.
+/// Spawn the top viewer section inside the given parent.
 ///
-/// The layout container is expected to be provided by `layout.rs`;
-/// this function only inserts the image node as a child.
-pub fn spawn_viewer_node(parent: &mut ChildSpawnerCommands, handle: Handle<Image>) {
-    parent.spawn((
-        ImageNode {
-            image: handle,
-            ..default()
-        },
-        Node {
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            ..default()
-        },
-        BackgroundColor(theme::BG_DARK),
-    ));
+/// The panel includes a framed viewport area with the dynamic image node.
+pub fn spawn_viewer_panel(parent: &mut ChildSpawnerCommands, handle: Handle<Image>) {
+    parent
+        .spawn((
+            Node {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                flex_grow: 1.0,
+                width: Val::Percent(100.0),
+                min_height: Val::Px(200.0),
+                padding: UiRect::all(Val::Px(12.0)),
+                ..default()
+            },
+            BackgroundColor(theme::BG_DARK),
+        ))
+        .with_children(|viewer| {
+            viewer
+                .spawn((
+                    Node {
+                        display: Display::Flex,
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        width: Val::Percent(100.0),
+                        height: Val::Percent(100.0),
+                        border: UiRect::all(Val::Px(1.0)),
+                        border_radius: BorderRadius::all(Val::Px(6.0)),
+                        ..default()
+                    },
+                    BackgroundColor(theme::BG_VIEWER),
+                    BorderColor::all(theme::BORDER_SUBTLE),
+                ))
+                .with_children(|frame| {
+                    frame.spawn((
+                        ImageNode::new(handle).with_mode(NodeImageMode::Auto),
+                        Node {
+                            max_width: Val::Percent(100.0),
+                            max_height: Val::Percent(100.0),
+                            ..default()
+                        },
+                    ));
+
+                    frame.spawn((
+                        Text::new("Viewer"),
+                        Node {
+                            position_type: PositionType::Absolute,
+                            top: Val::Px(8.0),
+                            left: Val::Px(10.0),
+                            ..default()
+                        },
+                        TextFont {
+                            font_size: theme::FONT_SIZE_LABEL,
+                            ..default()
+                        },
+                        TextColor(theme::TEXT_DIM),
+                    ));
+                });
+        });
 }
 
 /// When `ImageState.graded` changes, re-encode pixels as sRGB u8 and

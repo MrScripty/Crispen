@@ -6,13 +6,13 @@
 //! `ValueChange<Vec2>` emission.
 
 use bevy::asset::embedded_asset;
+use bevy::picking::{
+    Pickable,
+    events::{Cancel, Drag, DragEnd, DragStart, Pointer, Press},
+};
 use bevy::prelude::*;
 use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
-use bevy::picking::{
-    events::{Cancel, Drag, DragEnd, DragStart, Pointer, Press},
-    Pickable,
-};
 use bevy::ui::{
     ComputedNode, ComputedUiRenderTargetInfo, InteractionDisabled, UiGlobalTransform, UiScale,
     UiTransform, Val2,
@@ -106,6 +106,7 @@ pub fn color_wheel(wheel_type: WheelType) -> impl Bundle {
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
             width: Val::Px(theme::WHEEL_SIZE),
+            height: Val::Px(theme::WHEEL_SIZE + 24.0),
             ..Default::default()
         },
         wheel_type,
@@ -294,14 +295,14 @@ fn on_drag_cancel(
 /// and keeps cursor/master uniforms in sync with external param changes.
 /// Also updates the thumb position.
 fn update_wheel_material(
-    q_wheels: Query<(Entity, &WheelType), Or<(Added<WheelType>, Changed<WheelType>)>>,
+    q_wheels: Query<Entity, With<WheelType>>,
     q_children: Query<&Children>,
     q_material_node: Query<&MaterialNode<ColorWheelMaterial>>,
     mut q_node: Query<&mut Node>,
     mut materials: ResMut<Assets<ColorWheelMaterial>>,
     mut commands: Commands,
 ) {
-    for (wheel_ent, _wheel_type) in q_wheels.iter() {
+    for wheel_ent in q_wheels.iter() {
         let Ok(children) = q_children.get(wheel_ent) else {
             continue;
         };
@@ -310,28 +311,23 @@ fn update_wheel_material(
             continue;
         };
 
-        if let Ok(mat_node) = q_material_node.get(inner_ent) {
-            // Material already exists — nothing to update here.
-            // External sync systems will update cursor_x/cursor_y via the handle.
-            let _ = materials.get_mut(mat_node.id());
-        } else {
-            // First time: insert the material.
+        if q_material_node.get(inner_ent).is_err() {
+            // First time: insert the material and center the thumb.
             let handle = materials.add(ColorWheelMaterial::default());
             commands.entity(inner_ent).insert(MaterialNode(handle));
-        }
 
-        // Set thumb to center (default position).
-        let Ok(inner_children) = q_children.get(inner_ent) else {
-            continue;
-        };
-        let Some(&thumb_ent) = inner_children.first() else {
-            continue;
-        };
-        let Ok(mut thumb_node) = q_node.get_mut(thumb_ent) else {
-            continue;
-        };
-        thumb_node.left = Val::Percent(50.0);
-        thumb_node.top = Val::Percent(50.0);
+            let Ok(inner_children) = q_children.get(inner_ent) else {
+                continue;
+            };
+            let Some(&thumb_ent) = inner_children.first() else {
+                continue;
+            };
+            let Ok(mut thumb_node) = q_node.get_mut(thumb_ent) else {
+                continue;
+            };
+            thumb_node.left = Val::Percent(50.0);
+            thumb_node.top = Val::Percent(50.0);
+        }
     }
 }
 

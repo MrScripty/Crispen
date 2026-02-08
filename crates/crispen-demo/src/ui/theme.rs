@@ -16,6 +16,9 @@ pub const BG_PANEL: Color = Color::srgb(0.176, 0.176, 0.176);
 /// Control surface background (wheels, sliders).
 pub const BG_CONTROL: Color = Color::srgb(0.22, 0.22, 0.22);
 
+/// Image viewport background.
+pub const BG_VIEWER: Color = Color::srgb(0.06, 0.06, 0.06);
+
 // ── Text colors ─────────────────────────────────────────────────────────────
 
 /// Primary text (labels, values).
@@ -37,6 +40,9 @@ pub const SLIDER_TRACK: Color = Color::srgb(0.25, 0.25, 0.25);
 /// Slider thumb (grab handle).
 pub const SLIDER_THUMB: Color = Color::srgb(0.7, 0.7, 0.7);
 
+/// Subtle panel border color.
+pub const BORDER_SUBTLE: Color = Color::srgb(0.26, 0.26, 0.26);
+
 // ── Sizing ──────────────────────────────────────────────────────────────────
 
 /// Diameter (px) of a color wheel widget.
@@ -47,6 +53,9 @@ pub const SLIDER_HEIGHT: f32 = 18.0;
 
 /// Inner padding (px) applied to panels.
 pub const PANEL_PADDING: f32 = 8.0;
+
+/// Bottom panel height (px), similar to Resolve primaries module.
+pub const PRIMARIES_PANEL_HEIGHT: f32 = 380.0;
 
 // ── Typography ──────────────────────────────────────────────────────────────
 

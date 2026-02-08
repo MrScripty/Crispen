@@ -15,9 +15,11 @@ bevy = { workspace = true, features = [
     "bevy_ui",
     "bevy_ui_render",
     "bevy_picking",
+    "bevy_input_focus",
     "ui_picking",
     "experimental_bevy_ui_widgets",
     "bevy_winit",
+    "default_font",
     "wayland",
     "x11",
 ] }

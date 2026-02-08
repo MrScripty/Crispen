@@ -11,13 +11,14 @@ mod render;
 mod ui;
 mod ws_bridge;
 
+use bevy::input_focus::InputDispatchPlugin;
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
 
 use config::AppConfig;
+use crispen_bevy::CrispenPlugin;
 use crispen_bevy::events::{ParamsUpdatedEvent, ScopeDataReadyEvent};
 use crispen_bevy::resources::{GradingState, ScopeState};
-use crispen_bevy::CrispenPlugin;
 use ws_bridge::{OutboundUiMessages, WsBridge};
 
 fn main() {
@@ -53,9 +54,10 @@ fn main() {
                 }),
         )
         .add_plugins(CrispenPlugin)
+        .add_plugins(InputDispatchPlugin)
         .add_plugins(bevy::ui_widgets::UiWidgetsPlugins)
         .add_plugins(ui::CrispenUiPlugin)
-        .add_systems(Startup, (setup_camera, send_initial_state))
+        .add_systems(Startup, send_initial_state)
         .add_systems(
             Update,
             (
@@ -68,16 +70,8 @@ fn main() {
         .run();
 }
 
-/// Spawn a 2D camera for the image viewer.
-fn setup_camera(mut commands: Commands) {
-    commands.spawn(Camera2d);
-}
-
 /// Send initial state to the UI when the app starts.
-fn send_initial_state(
-    state: Res<GradingState>,
-    mut outbound: ResMut<OutboundUiMessages>,
-) {
+fn send_initial_state(state: Res<GradingState>, mut outbound: ResMut<OutboundUiMessages>) {
     outbound.send(ipc::BevyToUi::Initialize {
         params: state.params.clone(),
     });
