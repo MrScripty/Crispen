@@ -5,7 +5,9 @@
 
 use crispen_core::transform::params::{ColorSpaceId, GradingParams};
 
+pub mod async_readback;
 pub mod buffers;
+pub mod format_converter;
 pub mod lut_applicator;
 pub mod lut_baker;
 pub mod pipeline;
@@ -14,7 +16,9 @@ pub mod scope_dispatch;
 pub mod vulkan_interop;
 
 pub use buffers::{GpuImageHandle, GpuLutHandle, ScopeBuffers, ScopeConfig};
-pub use pipeline::{required_features, GpuGradingPipeline};
+pub use format_converter::ViewerFormat;
+pub use async_readback::AsyncFrameResult;
+pub use pipeline::{FrameResult, GpuGradingPipeline, required_features};
 pub use readback::ScopeResults;
 
 /// GPU-compatible grading parameters packed for a wgpu uniform buffer.

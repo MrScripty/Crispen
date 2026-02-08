@@ -20,7 +20,7 @@ struct GradingParamsGpu {
     output_space: u32,
 };
 
-@group(0) @binding(0) var<storage, read_write> lut_data: array<vec4<f32>>;
+@group(0) @binding(0) var lut_data: texture_storage_3d<rgba32float, write>;
 @group(0) @binding(1) var<uniform> params: GradingParamsGpu;
 @group(0) @binding(2) var<uniform> lut_size: u32;
 @group(0) @binding(3) var curve_hue_vs_hue: texture_1d<f32>;
@@ -508,7 +508,6 @@ fn bake_lut(@builtin(global_invocation_id) gid: vec3<u32>) {
     let size = lut_size;
     if (gid.x >= size || gid.y >= size || gid.z >= size) { return; }
 
-    let idx = gid.z * size * size + gid.y * size + gid.x;
     let r = f32(gid.x) / f32(size - 1u);
     let g = f32(gid.y) / f32(size - 1u);
     let b = f32(gid.z) / f32(size - 1u);
@@ -524,5 +523,9 @@ fn bake_lut(@builtin(global_invocation_id) gid: vec3<u32>) {
     c = apply_curves(c);
     c = output_transform(c, params.working_space, params.output_space);
 
-    lut_data[idx] = vec4<f32>(c, 1.0);
+    textureStore(
+        lut_data,
+        vec3<i32>(i32(gid.x), i32(gid.y), i32(gid.z)),
+        vec4<f32>(c, 1.0)
+    );
 }

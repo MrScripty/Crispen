@@ -4,8 +4,8 @@ use std::num::NonZeroU64;
 
 use crispen_core::transform::params::GradingParams;
 
-use crate::buffers::GpuLutHandle;
 use crate::GradingParamsGpu;
+use crate::buffers::GpuLutHandle;
 
 /// Default curve texture size (number of entries in each 1D LUT).
 const CURVE_LUT_SIZE: u32 = 256;
@@ -26,64 +26,61 @@ impl LutBaker {
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("crispen_bake_lut_shader"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("../shaders/bake_lut.wgsl").into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/bake_lut.wgsl").into()),
         });
 
-        let bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("crispen_bake_lut_layout"),
-                entries: &[
-                    // binding 0: lut_data storage buffer (read_write)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: NonZeroU64::new(16),
-                        },
-                        count: None,
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("crispen_bake_lut_layout"),
+            entries: &[
+                // binding 0: writable 3D LUT storage texture
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::StorageTexture {
+                        access: wgpu::StorageTextureAccess::WriteOnly,
+                        format: wgpu::TextureFormat::Rgba32Float,
+                        view_dimension: wgpu::TextureViewDimension::D3,
                     },
-                    // binding 1: params uniform
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: NonZeroU64::new(
-                                std::mem::size_of::<GradingParamsGpu>() as u64,
-                            ),
-                        },
-                        count: None,
+                    count: None,
+                },
+                // binding 1: params uniform
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(
+                            std::mem::size_of::<GradingParamsGpu>() as u64
+                        ),
                     },
-                    // binding 2: lut_size uniform
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: NonZeroU64::new(4),
-                        },
-                        count: None,
+                    count: None,
+                },
+                // binding 2: lut_size uniform
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(4),
                     },
-                    // bindings 3-6: curve 1D textures
-                    curve_texture_layout_entry(3),
-                    curve_texture_layout_entry(4),
-                    curve_texture_layout_entry(5),
-                    curve_texture_layout_entry(6),
-                    // binding 7: curve sampler
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 7,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-            });
+                    count: None,
+                },
+                // bindings 3-6: curve 1D textures
+                curve_texture_layout_entry(3),
+                curve_texture_layout_entry(4),
+                curve_texture_layout_entry(5),
+                curve_texture_layout_entry(6),
+                // binding 7: curve sampler
+                wgpu::BindGroupLayoutEntry {
+                    binding: 7,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+            ],
+        });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("crispen_bake_lut_pipeline_layout"),
@@ -160,19 +157,21 @@ impl LutBaker {
             }
             let lut_data = bake_curve_cpu(points, CURVE_LUT_SIZE as usize, idx == 0);
             let texture = write_curve_texture(device, queue, &lut_data, idx);
-            self.curve_views[idx] =
-                texture.create_view(&wgpu::TextureViewDescriptor::default());
+            self.curve_views[idx] = texture.create_view(&wgpu::TextureViewDescriptor::default());
             self.curve_textures[idx] = texture;
         }
     }
 
-    /// Dispatch the LUT bake compute shader.
+    /// Dispatch the LUT bake compute shader onto the given encoder.
+    ///
+    /// The caller is responsible for submitting the encoder.
     pub fn bake(
         &self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         params: &GradingParams,
         lut: &GpuLutHandle,
+        encoder: &mut wgpu::CommandEncoder,
     ) {
         let gpu_params = GradingParamsGpu::from_params(params);
         queue.write_buffer(&self.params_buffer, 0, bytemuck::bytes_of(&gpu_params));
@@ -186,7 +185,7 @@ impl LutBaker {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: lut.storage_buffer.as_entire_binding(),
+                    resource: wgpu::BindingResource::TextureView(&lut.texture_view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -221,9 +220,6 @@ impl LutBaker {
 
         let wg_xy = lut.size.div_ceil(8);
         let wg_z = lut.size.div_ceil(4);
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("crispen_bake_lut_encoder"),
-        });
 
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -234,9 +230,6 @@ impl LutBaker {
             pass.set_bind_group(0, &bind_group, &[]);
             pass.dispatch_workgroups(wg_xy, wg_xy, wg_z);
         }
-
-        lut.copy_storage_to_texture(&mut encoder);
-        queue.submit(std::iter::once(encoder.finish()));
     }
 }
 

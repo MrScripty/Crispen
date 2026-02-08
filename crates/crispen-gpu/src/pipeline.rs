@@ -5,11 +5,27 @@ use std::sync::Arc;
 use crispen_core::image::GradingImage;
 use crispen_core::transform::params::GradingParams;
 
+use crate::async_readback::AsyncReadback;
 use crate::buffers::{GpuImageHandle, GpuLutHandle, ScopeBuffers, ScopeConfig};
+use crate::format_converter::{FormatConverter, ViewerFormat};
 use crate::lut_applicator::LutApplicator;
 use crate::lut_baker::LutBaker;
 use crate::readback::{Readback, ScopeResults};
 use crate::scope_dispatch::ScopeDispatch;
+
+/// Results from a single frame submission.
+pub struct FrameResult {
+    /// Raw pixel bytes for the viewer (f16 or f32 depending on format).
+    pub viewer_bytes: Vec<u8>,
+    /// Image width in pixels.
+    pub width: u32,
+    /// Image height in pixels.
+    pub height: u32,
+    /// The pixel format of `viewer_bytes`.
+    pub format: ViewerFormat,
+    /// Scope computation results.
+    pub scopes: Option<ScopeResults>,
+}
 
 /// Returns the minimum `wgpu::Features` required by the crispen-gpu pipeline.
 ///
@@ -25,12 +41,22 @@ pub struct GpuGradingPipeline {
     queue: Arc<wgpu::Queue>,
     lut_baker: LutBaker,
     lut_applicator: LutApplicator,
+    format_converter: FormatConverter,
     scope_dispatch: ScopeDispatch,
     current_lut: Option<GpuLutHandle>,
     current_output: Option<GpuImageHandle>,
     scope_buffers: Option<ScopeBuffers>,
     readback: Option<Readback>,
+    /// Cached staging buffer for blocking image readback (legacy path).
+    image_readback_staging: Option<wgpu::Buffer>,
+    /// Double-buffered async readback (primary path).
+    async_readback: Option<AsyncReadback>,
     scope_config: ScopeConfig,
+    viewer_format: ViewerFormat,
+    /// Dimensions + format of the last async submission (for FrameResult).
+    last_async_width: u32,
+    last_async_height: u32,
+    last_async_viewer_byte_size: u64,
 }
 
 impl GpuGradingPipeline {
@@ -47,14 +73,12 @@ impl GpuGradingPipeline {
         }))
         .map_err(|e| format!("no suitable GPU adapter found: {e}"))?;
 
-        let (device, queue) = pollster::block_on(adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                label: Some("crispen_compute_device"),
-                required_features: required_features(),
-                required_limits: wgpu::Limits::default(),
-                ..Default::default()
-            },
-        ))
+        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+            label: Some("crispen_compute_device"),
+            required_features: required_features(),
+            required_limits: wgpu::Limits::default(),
+            ..Default::default()
+        }))
         .map_err(|e| format!("failed to create GPU device: {e}"))?;
 
         Ok(Self::new(Arc::new(device), Arc::new(queue)))
@@ -64,6 +88,7 @@ impl GpuGradingPipeline {
     pub fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) -> Self {
         let lut_baker = LutBaker::new(&device, &queue);
         let lut_applicator = LutApplicator::new(&device);
+        let format_converter = FormatConverter::new(&device);
         let scope_dispatch = ScopeDispatch::new(&device);
 
         Self {
@@ -71,13 +96,30 @@ impl GpuGradingPipeline {
             queue,
             lut_baker,
             lut_applicator,
+            format_converter,
             scope_dispatch,
             current_lut: None,
             current_output: None,
             scope_buffers: None,
             readback: None,
+            image_readback_staging: None,
+            async_readback: None,
             scope_config: ScopeConfig::default(),
+            viewer_format: ViewerFormat::F16,
+            last_async_width: 0,
+            last_async_height: 0,
+            last_async_viewer_byte_size: 0,
         }
+    }
+
+    /// Access the wgpu device.
+    pub fn device(&self) -> &wgpu::Device {
+        &self.device
+    }
+
+    /// Access the wgpu queue.
+    pub fn queue(&self) -> &wgpu::Queue {
+        &self.queue
     }
 
     /// Upload a source image to the GPU.
@@ -85,29 +127,206 @@ impl GpuGradingPipeline {
         GpuImageHandle::upload(&self.device, &self.queue, image)
     }
 
-    /// Download a graded image from the GPU.
-    pub fn download_image(&self, handle: &GpuImageHandle) -> GradingImage {
-        Readback::download_image(&self.device, &self.queue, handle)
+    /// Download a graded image from the GPU. Blocks until complete.
+    pub fn download_image(&mut self, handle: &GpuImageHandle) -> GradingImage {
+        Readback::download_image(
+            &self.device,
+            &self.queue,
+            handle,
+            &mut self.image_readback_staging,
+        )
     }
 
-    /// Bake grading parameters into a 3D LUT.
+    /// Submit the full grading pipeline in a single GPU submission:
+    /// bake LUT + apply LUT + format convert + scopes + staging copies.
+    ///
+    /// Returns raw viewer pixel bytes (f16 or f32) and scope results.
+    /// Blocks on readback. Async readback replaces this in Phase 3.
+    pub fn submit_frame(
+        &mut self,
+        source: &GpuImageHandle,
+        params: &GradingParams,
+        lut_size: u32,
+    ) -> FrameResult {
+        // Upload curve textures (immediate, no encoder needed).
+        self.lut_baker
+            .upload_curves(&self.device, &self.queue, params);
+
+        // Ensure LUT handle exists.
+        let lut = self
+            .current_lut
+            .get_or_insert_with(|| GpuLutHandle::new(&self.device, lut_size));
+        if lut.size != lut_size {
+            *lut = GpuLutHandle::new(&self.device, lut_size);
+        }
+
+        // Ensure output handle exists.
+        let output = self.current_output.get_or_insert_with(|| {
+            GpuImageHandle::create_output(&self.device, source.width, source.height)
+        });
+        if output.width != source.width || output.height != source.height {
+            *output = GpuImageHandle::create_output(&self.device, source.width, source.height);
+        }
+
+        let cfg = self.scope_config;
+        let _scope_buffers = self
+            .scope_buffers
+            .get_or_insert_with(|| ScopeBuffers::new(&self.device, &cfg, source.width));
+
+        let _readback = self
+            .readback
+            .get_or_insert_with(|| Readback::new(&self.device, &cfg, source.width));
+
+        // ── Single encoder for all GPU work ────────────────────────
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("crispen_frame_encoder"),
+            });
+
+        // 1. Bake LUT.
+        let lut = self.current_lut.as_ref().unwrap();
+        self.lut_baker
+            .bake(&self.device, &self.queue, params, lut, &mut encoder);
+
+        // 2. Apply LUT to source image.
+        let output = self.current_output.as_ref().unwrap();
+        self.lut_applicator.apply(
+            &self.device,
+            &self.queue,
+            source,
+            lut,
+            output,
+            &mut encoder,
+        );
+
+        // 3. Format conversion + staging copy for viewer image.
+        let pixel_count = output.pixel_count();
+        let viewer_format = self.viewer_format;
+        let viewer_byte_size = pixel_count as u64 * viewer_format.bytes_per_pixel();
+
+        // Pre-allocate staging buffer before format conversion (avoids borrow conflicts).
+        let needs_new_staging = match self.image_readback_staging.as_ref() {
+            Some(buf) => buf.size() < viewer_byte_size,
+            None => true,
+        };
+        if needs_new_staging {
+            self.image_readback_staging = Some(self.device.create_buffer(
+                &wgpu::BufferDescriptor {
+                    label: Some("crispen_image_staging"),
+                    size: viewer_byte_size,
+                    usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                    mapped_at_creation: false,
+                },
+            ));
+        }
+
+        match viewer_format {
+            ViewerFormat::F16 => {
+                let output = self.current_output.as_ref().unwrap();
+                let f16_buf = self.format_converter.convert(
+                    &self.device,
+                    &self.queue,
+                    output,
+                    &mut encoder,
+                );
+                let image_staging = self.image_readback_staging.as_ref().unwrap();
+                encoder.copy_buffer_to_buffer(f16_buf, 0, image_staging, 0, viewer_byte_size);
+            }
+            ViewerFormat::F32 => {
+                let output = self.current_output.as_ref().unwrap();
+                let image_staging = self.image_readback_staging.as_ref().unwrap();
+                encoder.copy_buffer_to_buffer(
+                    &output.buffer,
+                    0,
+                    image_staging,
+                    0,
+                    viewer_byte_size,
+                );
+            }
+        }
+
+        // 4. Scope dispatches.
+        let output = self.current_output.as_ref().unwrap();
+        let scope_buffers = self.scope_buffers.as_ref().unwrap();
+        self.scope_dispatch.dispatch(
+            &self.device,
+            &self.queue,
+            output,
+            scope_buffers,
+            cfg.waveform_height,
+            cfg.vectorscope_resolution,
+            cfg.cie_resolution,
+            &mut encoder,
+        );
+
+        // 5. Copy scope data to staging buffers.
+        let readback = self.readback.as_ref().unwrap();
+        readback.copy_to_staging(&mut encoder, scope_buffers);
+
+        // ── Single submit ──────────────────────────────────────────
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        // ── Blocking readback ──────────────────────────────────────
+        let image_staging = self.image_readback_staging.as_ref().unwrap();
+        image_staging
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, |_| {});
+
+        let readback = self.readback.as_ref().unwrap();
+        readback.map_staging_buffers();
+
+        self.device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
+
+        // Read viewer image bytes.
+        let output = self.current_output.as_ref().unwrap();
+        let viewer_bytes = {
+            let data = image_staging.slice(..).get_mapped_range();
+            let bytes = data[..viewer_byte_size as usize].to_vec();
+            drop(data);
+            image_staging.unmap();
+            bytes
+        };
+
+        // Read scope data.
+        let readback = self.readback.as_ref().unwrap();
+        let scopes = readback.read_mapped_scopes();
+
+        FrameResult {
+            viewer_bytes,
+            width: output.width,
+            height: output.height,
+            format: viewer_format,
+            scopes: Some(scopes),
+        }
+    }
+
+    /// Bake grading parameters into a 3D LUT (legacy single-step API).
     pub fn bake_lut(&mut self, params: &GradingParams, lut_size: u32) {
         let lut = self
             .current_lut
             .get_or_insert_with(|| GpuLutHandle::new(&self.device, lut_size));
 
-        // Recreate if size changed.
         if lut.size != lut_size {
             *lut = GpuLutHandle::new(&self.device, lut_size);
         }
 
         self.lut_baker
             .upload_curves(&self.device, &self.queue, params);
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("crispen_bake_lut_encoder"),
+            });
         self.lut_baker
-            .bake(&self.device, &self.queue, params, lut);
+            .bake(&self.device, &self.queue, params, lut, &mut encoder);
+        self.queue.submit(std::iter::once(encoder.finish()));
     }
 
-    /// Apply the current LUT to a source image. Returns the output handle.
+    /// Apply the current LUT to a source image (legacy single-step API).
     pub fn apply_lut(&mut self, source: &GpuImageHandle) -> &GpuImageHandle {
         let lut = self
             .current_lut
@@ -118,61 +337,28 @@ impl GpuGradingPipeline {
             GpuImageHandle::create_output(&self.device, source.width, source.height)
         });
 
-        // Recreate if dimensions changed.
         if output.width != source.width || output.height != source.height {
             *output = GpuImageHandle::create_output(&self.device, source.width, source.height);
         }
 
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("crispen_apply_lut_encoder"),
+            });
         self.lut_applicator
-            .apply(&self.device, &self.queue, source, lut, output);
+            .apply(&self.device, &self.queue, source, lut, output, &mut encoder);
+        self.queue.submit(std::iter::once(encoder.finish()));
 
         self.current_output.as_ref().unwrap()
     }
 
-    /// Compute scopes on the given image.
-    pub fn compute_scopes(&mut self, image: &GpuImageHandle) -> ScopeResults {
-        let cfg = self.scope_config;
-
-        let scope_buffers = self.scope_buffers.get_or_insert_with(|| {
-            ScopeBuffers::new(&self.device, &cfg, image.width)
-        });
-
-        self.scope_dispatch.dispatch(
-            &self.device,
-            &self.queue,
-            image,
-            scope_buffers,
-            cfg.waveform_height,
-            cfg.vectorscope_resolution,
-            cfg.cie_resolution,
-        );
-
-        let readback = self.readback.get_or_insert_with(|| {
-            Readback::new(&self.device, &cfg, image.width)
-        });
-
-        // Copy scope data to staging.
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("crispen_scope_readback_encoder"),
-            });
-        readback.copy_to_staging(&mut encoder, scope_buffers);
-        self.queue.submit(std::iter::once(encoder.finish()));
-
-        readback.read_scopes(&self.device)
-    }
-
-    /// Run the full pipeline: bake + apply + scopes.
-    pub fn execute(
-        &mut self,
-        source: &GpuImageHandle,
-        params: &GradingParams,
-        lut_size: u32,
-    ) -> ScopeResults {
-        self.bake_lut(params, lut_size);
-        self.apply_lut(source);
-        self.compute_scopes_on_output()
+    /// Compute scopes on the most recently graded output image, if available.
+    pub fn compute_scopes_on_current_output(&mut self) -> Option<ScopeResults> {
+        if self.current_output.is_none() {
+            return None;
+        }
+        Some(self.compute_scopes_on_output())
     }
 
     /// Compute scopes on the current output image.
@@ -181,9 +367,19 @@ impl GpuGradingPipeline {
         let width = output.width;
         let cfg = self.scope_config;
 
-        let scope_buffers = self.scope_buffers.get_or_insert_with(|| {
-            ScopeBuffers::new(&self.device, &cfg, width)
-        });
+        let scope_buffers = self
+            .scope_buffers
+            .get_or_insert_with(|| ScopeBuffers::new(&self.device, &cfg, width));
+
+        let readback = self
+            .readback
+            .get_or_insert_with(|| Readback::new(&self.device, &cfg, width));
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("crispen_scope_encoder"),
+            });
 
         self.scope_dispatch.dispatch(
             &self.device,
@@ -193,21 +389,166 @@ impl GpuGradingPipeline {
             cfg.waveform_height,
             cfg.vectorscope_resolution,
             cfg.cie_resolution,
+            &mut encoder,
         );
 
-        let readback = self.readback.get_or_insert_with(|| {
-            Readback::new(&self.device, &cfg, width)
-        });
-
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("crispen_scope_readback_encoder"),
-            });
-        readback.copy_to_staging(&mut encoder, self.scope_buffers.as_ref().unwrap());
+        readback.copy_to_staging(&mut encoder, scope_buffers);
         self.queue.submit(std::iter::once(encoder.finish()));
 
         readback.read_scopes(&self.device)
+    }
+
+    // ── Async (non-blocking) API ──────────────────────────────────
+
+    /// Submit GPU work (bake + apply + format convert + scopes) without
+    /// blocking. Results are consumed later via [`try_consume_readback`].
+    pub fn submit_gpu_work(
+        &mut self,
+        source: &GpuImageHandle,
+        params: &GradingParams,
+        lut_size: u32,
+    ) {
+        // Upload curve textures.
+        self.lut_baker
+            .upload_curves(&self.device, &self.queue, params);
+
+        // Ensure LUT handle.
+        let lut = self
+            .current_lut
+            .get_or_insert_with(|| GpuLutHandle::new(&self.device, lut_size));
+        if lut.size != lut_size {
+            *lut = GpuLutHandle::new(&self.device, lut_size);
+        }
+
+        // Ensure output handle.
+        let output = self.current_output.get_or_insert_with(|| {
+            GpuImageHandle::create_output(&self.device, source.width, source.height)
+        });
+        if output.width != source.width || output.height != source.height {
+            *output = GpuImageHandle::create_output(&self.device, source.width, source.height);
+        }
+
+        let cfg = self.scope_config;
+        let _scope_buffers = self
+            .scope_buffers
+            .get_or_insert_with(|| ScopeBuffers::new(&self.device, &cfg, source.width));
+
+        let pixel_count = source.width as u64 * source.height as u64;
+        let viewer_format = self.viewer_format;
+        let viewer_byte_size = pixel_count * viewer_format.bytes_per_pixel();
+
+        // Ensure async readback exists with correct sizing.
+        if self.async_readback.is_none() {
+            self.async_readback = Some(AsyncReadback::new(
+                &self.device,
+                &cfg,
+                source.width,
+                viewer_byte_size,
+            ));
+        }
+
+        // ── Single encoder ───────────────────────────────────────
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("crispen_async_frame_encoder"),
+            });
+
+        // 1. Bake LUT.
+        let lut = self.current_lut.as_ref().unwrap();
+        self.lut_baker
+            .bake(&self.device, &self.queue, params, lut, &mut encoder);
+
+        // 2. Apply LUT.
+        let output = self.current_output.as_ref().unwrap();
+        self.lut_applicator.apply(
+            &self.device,
+            &self.queue,
+            source,
+            lut,
+            output,
+            &mut encoder,
+        );
+
+        // 3. Format conversion + 4. Scope dispatches.
+        let output = self.current_output.as_ref().unwrap();
+        let scope_buffers = self.scope_buffers.as_ref().unwrap();
+
+        match viewer_format {
+            ViewerFormat::F16 => {
+                let f16_buf = self.format_converter.convert(
+                    &self.device,
+                    &self.queue,
+                    output,
+                    &mut encoder,
+                );
+                self.scope_dispatch.dispatch(
+                    &self.device,
+                    &self.queue,
+                    output,
+                    scope_buffers,
+                    cfg.waveform_height,
+                    cfg.vectorscope_resolution,
+                    cfg.cie_resolution,
+                    &mut encoder,
+                );
+                let async_rb = self.async_readback.as_mut().unwrap();
+                async_rb.submit_readback(
+                    &mut encoder,
+                    f16_buf,
+                    viewer_byte_size,
+                    scope_buffers,
+                );
+            }
+            ViewerFormat::F32 => {
+                self.scope_dispatch.dispatch(
+                    &self.device,
+                    &self.queue,
+                    output,
+                    scope_buffers,
+                    cfg.waveform_height,
+                    cfg.vectorscope_resolution,
+                    cfg.cie_resolution,
+                    &mut encoder,
+                );
+                let async_rb = self.async_readback.as_mut().unwrap();
+                async_rb.submit_readback(
+                    &mut encoder,
+                    &output.buffer,
+                    viewer_byte_size,
+                    scope_buffers,
+                );
+            }
+        }
+
+        // ── Single submit ────────────────────────────────────────
+        self.queue.submit(std::iter::once(encoder.finish()));
+
+        // Begin map_async (must happen after submit).
+        let async_rb = self.async_readback.as_mut().unwrap();
+        async_rb.begin_map_after_submit();
+
+        // Track dimensions for when we consume the result.
+        self.last_async_width = output.width;
+        self.last_async_height = output.height;
+        self.last_async_viewer_byte_size = viewer_byte_size;
+    }
+
+    /// Non-blocking: check if async readback data is ready and consume it.
+    ///
+    /// Returns `Some(FrameResult)` if data is available, `None` otherwise.
+    /// Should be called every frame — it drives `device.poll()` internally.
+    pub fn try_consume_readback(&mut self) -> Option<FrameResult> {
+        let async_rb = self.async_readback.as_mut()?;
+        let result = async_rb.try_consume(&self.device, self.last_async_viewer_byte_size)?;
+
+        Some(FrameResult {
+            viewer_bytes: result.viewer_bytes,
+            width: self.last_async_width,
+            height: self.last_async_height,
+            format: self.viewer_format,
+            scopes: Some(result.scopes),
+        })
     }
 
     /// Set the scope configuration (waveform height, vectorscope/CIE resolution).
@@ -216,10 +557,33 @@ impl GpuGradingPipeline {
         // Invalidate cached scope resources so they're recreated.
         self.scope_buffers = None;
         self.readback = None;
+        self.async_readback = None;
     }
 
     /// Get a reference to the current output image, if any.
     pub fn current_output(&self) -> Option<&GpuImageHandle> {
         self.current_output.as_ref()
+    }
+
+    /// Set the viewer pixel format (F16 or F32).
+    pub fn set_viewer_format(&mut self, format: ViewerFormat) {
+        if self.viewer_format != format {
+            self.viewer_format = format;
+            // Invalidate staging buffers — size differs between formats.
+            self.image_readback_staging = None;
+            self.async_readback = None;
+        }
+    }
+
+    /// Get the current viewer format.
+    pub fn viewer_format(&self) -> ViewerFormat {
+        self.viewer_format
+    }
+
+    /// Whether an async readback is currently in flight (not yet consumed).
+    pub fn has_pending_readback(&self) -> bool {
+        self.async_readback
+            .as_ref()
+            .is_some_and(|rb| rb.has_pending())
     }
 }

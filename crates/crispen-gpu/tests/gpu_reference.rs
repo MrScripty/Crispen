@@ -17,14 +17,12 @@ fn create_test_device() -> (Arc<wgpu::Device>, Arc<wgpu::Queue>) {
     }))
     .expect("No GPU adapter found — GPU tests require a GPU");
 
-    let (device, queue) = pollster::block_on(adapter.request_device(
-        &wgpu::DeviceDescriptor {
-            label: Some("crispen_test_device"),
-            required_features: crispen_gpu::required_features(),
-            required_limits: adapter.limits(),
-            ..Default::default()
-        },
-    ))
+    let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+        label: Some("crispen_test_device"),
+        required_features: crispen_gpu::required_features(),
+        required_limits: adapter.limits(),
+        ..Default::default()
+    }))
     .expect("Failed to create test device");
 
     (Arc::new(device), Arc::new(queue))
@@ -58,8 +56,7 @@ fn test_gpu_lut_bake_identity() {
     // are both linear).
     let mut params = GradingParams::default();
     // Force all spaces to LinearSrgb so no transfer function or matrix is applied.
-    params.color_management.input_space =
-        crispen_core::transform::params::ColorSpaceId::LinearSrgb;
+    params.color_management.input_space = crispen_core::transform::params::ColorSpaceId::LinearSrgb;
     params.color_management.working_space =
         crispen_core::transform::params::ColorSpaceId::LinearSrgb;
     params.color_management.output_space =
@@ -99,8 +96,7 @@ fn test_apply_lut_preserves_alpha() {
     let mut pipeline = GpuGradingPipeline::new(device.clone(), queue.clone());
 
     let mut params = GradingParams::default();
-    params.color_management.input_space =
-        crispen_core::transform::params::ColorSpaceId::LinearSrgb;
+    params.color_management.input_space = crispen_core::transform::params::ColorSpaceId::LinearSrgb;
     params.color_management.working_space =
         crispen_core::transform::params::ColorSpaceId::LinearSrgb;
     params.color_management.output_space =
@@ -139,8 +135,7 @@ fn test_histogram_bins_sum_to_pixel_count() {
 
     // Bake identity LUT and apply first.
     let mut params = GradingParams::default();
-    params.color_management.input_space =
-        crispen_core::transform::params::ColorSpaceId::LinearSrgb;
+    params.color_management.input_space = crispen_core::transform::params::ColorSpaceId::LinearSrgb;
     params.color_management.working_space =
         crispen_core::transform::params::ColorSpaceId::LinearSrgb;
     params.color_management.output_space =
@@ -166,8 +161,7 @@ fn test_bake_lut_workgroup_coverage() {
 
     // Use size=33 which is not a multiple of workgroup size 8.
     let mut params = GradingParams::default();
-    params.color_management.input_space =
-        crispen_core::transform::params::ColorSpaceId::LinearSrgb;
+    params.color_management.input_space = crispen_core::transform::params::ColorSpaceId::LinearSrgb;
     params.color_management.working_space =
         crispen_core::transform::params::ColorSpaceId::LinearSrgb;
     params.color_management.output_space =
@@ -194,5 +188,8 @@ fn test_bake_lut_workgroup_coverage() {
             }
         }
     }
-    assert!(any_different, "Gain 1.5 should produce visibly different output");
+    assert!(
+        any_different,
+        "Gain 1.5 should produce visibly different output"
+    );
 }

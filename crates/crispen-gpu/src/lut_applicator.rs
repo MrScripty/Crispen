@@ -16,68 +16,65 @@ impl LutApplicator {
     pub fn new(device: &wgpu::Device) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("crispen_apply_lut_shader"),
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("../shaders/apply_lut.wgsl").into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(include_str!("../shaders/apply_lut.wgsl").into()),
         });
 
-        let bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("crispen_apply_lut_layout"),
-                entries: &[
-                    // binding 0: source storage (read)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: true },
-                            has_dynamic_offset: false,
-                            min_binding_size: NonZeroU64::new(16),
-                        },
-                        count: None,
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("crispen_apply_lut_layout"),
+            entries: &[
+                // binding 0: source storage (read)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(16),
                     },
-                    // binding 1: output storage (read_write)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Storage { read_only: false },
-                            has_dynamic_offset: false,
-                            min_binding_size: NonZeroU64::new(16),
-                        },
-                        count: None,
+                    count: None,
+                },
+                // binding 1: output storage (read_write)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(16),
                     },
-                    // binding 2: LUT 3D texture
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 2,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Texture {
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                            view_dimension: wgpu::TextureViewDimension::D3,
-                            multisampled: false,
-                        },
-                        count: None,
+                    count: None,
+                },
+                // binding 2: LUT 3D texture
+                wgpu::BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D3,
+                        multisampled: false,
                     },
-                    // binding 3: LUT sampler (trilinear)
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 3,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
+                    count: None,
+                },
+                // binding 3: LUT sampler (trilinear)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                // binding 4: dimensions uniform
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: NonZeroU64::new(8),
                     },
-                    // binding 4: dimensions uniform
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 4,
-                        visibility: wgpu::ShaderStages::COMPUTE,
-                        ty: wgpu::BindingType::Buffer {
-                            ty: wgpu::BufferBindingType::Uniform,
-                            has_dynamic_offset: false,
-                            min_binding_size: NonZeroU64::new(8),
-                        },
-                        count: None,
-                    },
-                ],
-            });
+                    count: None,
+                },
+            ],
+        });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("crispen_apply_lut_pipeline_layout"),
@@ -108,7 +105,9 @@ impl LutApplicator {
         }
     }
 
-    /// Dispatch the LUT application compute shader.
+    /// Dispatch the LUT application compute shader onto the given encoder.
+    ///
+    /// The caller is responsible for submitting the encoder.
     pub fn apply(
         &self,
         device: &wgpu::Device,
@@ -116,6 +115,7 @@ impl LutApplicator {
         source: &GpuImageHandle,
         lut: &GpuLutHandle,
         output: &GpuImageHandle,
+        encoder: &mut wgpu::CommandEncoder,
     ) {
         let dims = [source.width, source.height, 0u32, 0u32];
         queue.write_buffer(&self.dimensions_buffer, 0, bytemuck::cast_slice(&dims));
@@ -150,10 +150,6 @@ impl LutApplicator {
         let wg_x = source.width.div_ceil(16);
         let wg_y = source.height.div_ceil(16);
 
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("crispen_apply_lut_encoder"),
-        });
-
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("crispen_apply_lut_pass"),
@@ -163,7 +159,5 @@ impl LutApplicator {
             pass.set_bind_group(0, &bind_group, &[]);
             pass.dispatch_workgroups(wg_x, wg_y, 1);
         }
-
-        queue.submit(std::iter::once(encoder.finish()));
     }
 }

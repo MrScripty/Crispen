@@ -25,11 +25,7 @@ pub struct Readback {
 
 impl Readback {
     /// Create staging buffers sized to match the scope buffers.
-    pub fn new(
-        device: &wgpu::Device,
-        scope_config: &ScopeConfig,
-        image_width: u32,
-    ) -> Self {
+    pub fn new(device: &wgpu::Device, scope_config: &ScopeConfig, image_width: u32) -> Self {
         let histogram_staging = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("crispen_histogram_staging"),
             size: 1024 * 4,
@@ -45,8 +41,7 @@ impl Readback {
             mapped_at_creation: false,
         });
 
-        let vs_size =
-            (scope_config.vectorscope_resolution as u64).pow(2) * 4;
+        let vs_size = (scope_config.vectorscope_resolution as u64).pow(2) * 4;
         let vectorscope_staging = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("crispen_vectorscope_staging"),
             size: vs_size,
@@ -108,9 +103,11 @@ impl Readback {
         );
     }
 
-    /// Map staging buffers and read scope data back to CPU. Blocks until complete.
-    pub fn read_scopes(&self, device: &wgpu::Device) -> ScopeResults {
-        // Map all staging buffers.
+    /// Initiate `map_async` on all scope staging buffers without polling.
+    ///
+    /// Call this before `device.poll()`, then use [`read_mapped_scopes`] after
+    /// the poll completes to read the data.
+    pub fn map_staging_buffers(&self) {
         self.histogram_staging
             .slice(..)
             .map_async(wgpu::MapMode::Read, |_| {});
@@ -123,11 +120,12 @@ impl Readback {
         self.cie_staging
             .slice(..)
             .map_async(wgpu::MapMode::Read, |_| {});
+    }
 
-        device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .unwrap();
-
+    /// Read scope data from already-mapped staging buffers and unmap them.
+    ///
+    /// Must be called after [`map_staging_buffers`] + `device.poll()`.
+    pub fn read_mapped_scopes(&self) -> ScopeResults {
         // Read histogram: 1024 u32s → 4 channels of 256 bins.
         let histogram = {
             let data = self.histogram_staging.slice(..).get_mapped_range();
@@ -197,19 +195,36 @@ impl Readback {
         }
     }
 
+    /// Map staging buffers, block on device poll, and read scope data. Convenience wrapper.
+    pub fn read_scopes(&self, device: &wgpu::Device) -> ScopeResults {
+        self.map_staging_buffers();
+        device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+        self.read_mapped_scopes()
+    }
+
     /// Download a GPU image buffer back to a [`GradingImage`]. Blocks until complete.
     pub fn download_image(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         handle: &GpuImageHandle,
+        staging_cache: &mut Option<wgpu::Buffer>,
     ) -> GradingImage {
         let size = handle.byte_size();
-        let staging = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("crispen_image_staging"),
-            size,
-            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
-            mapped_at_creation: false,
-        });
+        let needs_new_staging = match staging_cache.as_ref() {
+            Some(buf) => buf.size() < size,
+            None => true,
+        };
+        if needs_new_staging {
+            *staging_cache = Some(device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("crispen_image_staging"),
+                size,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            }));
+        }
+        let staging = staging_cache
+            .as_ref()
+            .expect("staging cache should be initialized");
 
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("crispen_image_download_encoder"),
@@ -217,12 +232,8 @@ impl Readback {
         encoder.copy_buffer_to_buffer(&handle.buffer, 0, &staging, 0, size);
         queue.submit(std::iter::once(encoder.finish()));
 
-        staging
-            .slice(..)
-            .map_async(wgpu::MapMode::Read, |_| {});
-        device
-            .poll(wgpu::PollType::wait_indefinitely())
-            .unwrap();
+        staging.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+        device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
 
         let data = staging.slice(..).get_mapped_range();
         let pixels_flat: &[[f32; 4]] = bytemuck::cast_slice(&data);
