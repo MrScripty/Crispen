@@ -1,0 +1,20 @@
+[package]
+name = "crispen-bevy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+crispen-core = { path = "../crispen-core" }
+crispen-gpu = { path = "../crispen-gpu" }
+bevy = { workspace = true, features = [
+    "bevy_core_pipeline",
+    "bevy_render",
+    "bevy_asset",
+    "bevy_log",
+    "bevy_ui",
+] }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

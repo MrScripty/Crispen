@@ -1,0 +1,13 @@
+[package]
+name = "crispen-ofx"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+crispen-core = { path = "../crispen-core" }
+openfx-sys = { workspace = true, optional = true }
+tracing = { workspace = true }
+
+[lints]
+workspace = true

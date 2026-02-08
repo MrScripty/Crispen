@@ -1,0 +1,15 @@
+[package]
+name = "crispen-gpu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+crispen-core = { path = "../crispen-core" }
+wgpu = { workspace = true }
+bytemuck = { workspace = true }
+tracing = { workspace = true }
+parking_lot = { workspace = true }
+
+[lints]
+workspace = true
