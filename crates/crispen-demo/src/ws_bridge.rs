@@ -4,12 +4,16 @@
 //! (tokio-tungstenite) instead of wry's native IPC for full bidirectional
 //! streaming of scope data and parameter updates.
 
+use std::path::Path;
+
 use bevy::prelude::*;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 
+use crate::image_loader;
 use crate::ipc::{BevyToUi, UiToBevy};
-use crispen_bevy::events::ColorGradingCommand;
+use crispen_bevy::events::{ColorGradingCommand, ImageLoadedEvent};
+use crispen_bevy::resources::{GpuPipelineState, GradingState, ImageState};
 
 /// Resource holding outbound messages to send to the UI.
 ///
@@ -149,22 +153,47 @@ pub fn flush_outbound_messages(
 
 /// Bevy system: receives inbound messages from the WebSocket bridge
 /// and dispatches them as `ColorGradingCommand` messages.
+///
+/// `LoadImage` is handled directly here (loading the file and uploading
+/// to the GPU) rather than forwarded as a command, because the demo crate
+/// owns the image loader and GPU resource access.
 pub fn poll_inbound_messages(
     mut bridge: ResMut<WsBridge>,
     mut commands: MessageWriter<ColorGradingCommand>,
+    mut images: ResMut<ImageState>,
+    mut gpu: Option<ResMut<GpuPipelineState>>,
+    mut state: ResMut<GradingState>,
+    mut outbound: ResMut<OutboundUiMessages>,
+    mut image_loaded: MessageWriter<ImageLoadedEvent>,
 ) {
     while let Ok(json) = bridge.inbound_rx.try_recv() {
         match serde_json::from_str::<UiToBevy>(&json) {
-            Ok(msg) => dispatch_ui_message(msg, &mut commands),
+            Ok(msg) => dispatch_ui_message(
+                msg,
+                &mut commands,
+                &mut images,
+                gpu.as_deref_mut(),
+                &mut state,
+                &mut outbound,
+                &mut image_loaded,
+            ),
             Err(e) => tracing::warn!("Failed to parse UI message: {e}"),
         }
     }
 }
 
-/// Convert a `UiToBevy` message into the appropriate ECS command.
+/// Convert a `UiToBevy` message into the appropriate ECS action.
+///
+/// Most messages become `ColorGradingCommand` events. `LoadImage` is
+/// handled directly since it requires file I/O and GPU upload.
 fn dispatch_ui_message(
     msg: UiToBevy,
     commands: &mut MessageWriter<ColorGradingCommand>,
+    images: &mut ResMut<ImageState>,
+    gpu: Option<&mut GpuPipelineState>,
+    state: &mut ResMut<GradingState>,
+    outbound: &mut ResMut<OutboundUiMessages>,
+    image_loaded: &mut MessageWriter<ImageLoadedEvent>,
 ) {
     match msg {
         UiToBevy::SetParams { params } => {
@@ -177,7 +206,7 @@ fn dispatch_ui_message(
             commands.write(ColorGradingCommand::ResetGrade);
         }
         UiToBevy::LoadImage { path } => {
-            commands.write(ColorGradingCommand::LoadImage { path });
+            handle_load_image(&path, images, gpu, state, outbound, image_loaded);
         }
         UiToBevy::LoadLut { path, slot } => {
             commands.write(ColorGradingCommand::LoadLut { path, slot });
@@ -192,6 +221,52 @@ fn dispatch_ui_message(
             commands.write(ColorGradingCommand::ToggleScope {
                 scope_type,
                 visible,
+            });
+        }
+    }
+}
+
+/// Load an image from disk, upload to GPU, and update ECS state.
+fn handle_load_image(
+    path: &str,
+    images: &mut ResMut<ImageState>,
+    gpu: Option<&mut GpuPipelineState>,
+    state: &mut ResMut<GradingState>,
+    outbound: &mut ResMut<OutboundUiMessages>,
+    image_loaded: &mut MessageWriter<ImageLoadedEvent>,
+) {
+    match image_loader::load_image(Path::new(path)) {
+        Ok(img) => {
+            let width = img.width;
+            let height = img.height;
+            let bit_depth = format!("{:?}", img.source_bit_depth);
+
+            // Upload to GPU if pipeline is available.
+            if let Some(gpu) = gpu {
+                let handle = gpu.pipeline.upload_image(&img);
+                gpu.source_handle = Some(handle);
+            }
+
+            images.source = Some(img);
+            state.dirty = true;
+
+            image_loaded.write(ImageLoadedEvent {
+                width,
+                height,
+                bit_depth: bit_depth.clone(),
+            });
+            outbound.send(BevyToUi::ImageLoaded {
+                width,
+                height,
+                bit_depth,
+            });
+
+            tracing::info!("Image loaded: {path} ({width}x{height})");
+        }
+        Err(e) => {
+            tracing::error!("Failed to load image {path}: {e}");
+            outbound.send(BevyToUi::Error {
+                message: format!("Failed to load image: {e}"),
             });
         }
     }
