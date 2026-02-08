@@ -1,4 +1,4 @@
-//! Primaries panel (Lift / Gamma / Gain / Offset wheels + slider bars).
+//! Primaries panel (Lift / Gamma / Gain / Offset wheels + dial knobs).
 //!
 //! Layout matches DaVinci Resolve's Primaries panel:
 //! ```text
@@ -15,7 +15,8 @@
 use bevy::prelude::*;
 
 use super::color_wheel::{WheelType, color_wheel};
-use super::components::{ParamId, param_default, param_range, param_step, spawn_param_slider};
+use super::components::{ParamId, param_default, param_label, param_range, param_step};
+use super::dial::{DialLabelPosition, spawn_param_dial};
 use super::theme;
 
 /// Spawn the primaries panel as a child of the given parent.
@@ -27,7 +28,7 @@ pub fn spawn_primaries_panel(parent: &mut ChildSpawnerCommands) {
                 flex_direction: FlexDirection::Column,
                 height: Val::Px(theme::PRIMARIES_PANEL_HEIGHT),
                 padding: UiRect::all(Val::Px(theme::PANEL_PADDING)),
-                row_gap: Val::Px(8.0),
+                row_gap: Val::Px(6.0),
                 width: Val::Percent(100.0),
                 border: UiRect::top(Val::Px(1.0)),
                 ..default()
@@ -44,41 +45,43 @@ pub fn spawn_primaries_panel(parent: &mut ChildSpawnerCommands) {
                 },
                 TextColor(theme::TEXT_PRIMARY),
             ));
-            spawn_top_sliders(panel);
+            spawn_top_dials(panel);
             spawn_wheels_row(panel);
-            spawn_bottom_sliders(panel);
+            spawn_bottom_dials(panel);
         });
 }
 
-/// Convenience wrapper that passes range/default/step from the `ParamId`.
-fn slider(parent: &mut ChildSpawnerCommands, label: &str, id: ParamId) {
-    spawn_param_slider(
+/// Convenience wrapper that spawns a dial from a `ParamId`.
+fn dial(parent: &mut ChildSpawnerCommands, id: ParamId, label_position: DialLabelPosition) {
+    spawn_param_dial(
         parent,
-        label,
+        param_label(id),
         id,
         param_range(id),
         param_default(id),
         param_step(id),
+        label_position,
     );
 }
 
-fn spawn_top_sliders(panel: &mut ChildSpawnerCommands) {
+fn spawn_top_dials(panel: &mut ChildSpawnerCommands) {
     panel
         .spawn(Node {
             display: Display::Flex,
             flex_direction: FlexDirection::Row,
-            flex_wrap: FlexWrap::Wrap,
-            column_gap: Val::Px(12.0),
-            row_gap: Val::Px(4.0),
-            width: Val::Percent(100.0),
+            justify_content: JustifyContent::SpaceBetween,
+            align_items: AlignItems::Center,
+            align_self: AlignSelf::Center,
+            width: Val::Px(theme::WHEEL_DIAL_ROW_WIDTH),
+            margin: UiRect::top(Val::Px(theme::TOP_DIAL_ROW_MARGIN_TOP)),
             ..default()
         })
         .with_children(|row| {
-            slider(row, "TEMP", ParamId::Temperature);
-            slider(row, "TINT", ParamId::Tint);
-            slider(row, "CONTRAST", ParamId::Contrast);
-            slider(row, "PIVOT", ParamId::Pivot);
-            slider(row, "MID DETAIL", ParamId::MidtoneDetail);
+            dial(row, ParamId::Temperature, DialLabelPosition::Above);
+            dial(row, ParamId::Tint, DialLabelPosition::Above);
+            dial(row, ParamId::Contrast, DialLabelPosition::Above);
+            dial(row, ParamId::Pivot, DialLabelPosition::Above);
+            dial(row, ParamId::MidtoneDetail, DialLabelPosition::Above);
         });
 }
 
@@ -87,12 +90,13 @@ fn spawn_wheels_row(panel: &mut ChildSpawnerCommands) {
         .spawn(Node {
             display: Display::Flex,
             flex_direction: FlexDirection::Row,
-            justify_content: JustifyContent::SpaceEvenly,
+            justify_content: JustifyContent::SpaceBetween,
             align_items: AlignItems::Center,
-            width: Val::Percent(100.0),
-            flex_grow: 1.0,
-            min_height: Val::Px(theme::WHEEL_SIZE + 24.0),
-            padding: UiRect::axes(Val::Px(0.0), Val::Px(2.0)),
+            align_self: AlignSelf::Center,
+            width: Val::Px(theme::WHEEL_GROUP_WIDTH),
+            height: Val::Px(theme::WHEEL_SIZE + 20.0),
+            min_height: Val::Px(theme::WHEEL_SIZE + 20.0),
+            max_height: Val::Px(theme::WHEEL_SIZE + 20.0),
             ..default()
         })
         .with_children(|row| {
@@ -107,22 +111,23 @@ fn spawn_wheels_row(panel: &mut ChildSpawnerCommands) {
         });
 }
 
-fn spawn_bottom_sliders(panel: &mut ChildSpawnerCommands) {
+fn spawn_bottom_dials(panel: &mut ChildSpawnerCommands) {
     panel
         .spawn(Node {
             display: Display::Flex,
             flex_direction: FlexDirection::Row,
-            flex_wrap: FlexWrap::Wrap,
-            column_gap: Val::Px(12.0),
-            row_gap: Val::Px(4.0),
-            width: Val::Percent(100.0),
+            justify_content: JustifyContent::SpaceBetween,
+            align_items: AlignItems::Center,
+            align_self: AlignSelf::Center,
+            width: Val::Px(theme::WHEEL_DIAL_ROW_WIDTH),
+            margin: UiRect::top(Val::Px(theme::BOTTOM_DIAL_ROW_MARGIN_TOP)),
             ..default()
         })
         .with_children(|row| {
-            slider(row, "SHADOWS", ParamId::Shadows);
-            slider(row, "HIGHLIGHTS", ParamId::Highlights);
-            slider(row, "SATURATION", ParamId::Saturation);
-            slider(row, "HUE", ParamId::Hue);
-            slider(row, "LUMA MIX", ParamId::LumaMix);
+            dial(row, ParamId::Shadows, DialLabelPosition::Below);
+            dial(row, ParamId::Highlights, DialLabelPosition::Below);
+            dial(row, ParamId::Saturation, DialLabelPosition::Below);
+            dial(row, ParamId::Hue, DialLabelPosition::Below);
+            dial(row, ParamId::LumaMix, DialLabelPosition::Below);
         });
 }

@@ -32,30 +32,42 @@ pub const TEXT_DIM: Color = Color::srgb(0.55, 0.55, 0.55);
 /// Accent color for selected items and active controls.
 pub const ACCENT: Color = Color::srgb(0.95, 0.55, 0.094);
 
-// ── Slider colors ───────────────────────────────────────────────────────────
-
-/// Slider track background.
-pub const SLIDER_TRACK: Color = Color::srgb(0.25, 0.25, 0.25);
-
-/// Slider thumb (grab handle).
-pub const SLIDER_THUMB: Color = Color::srgb(0.7, 0.7, 0.7);
+// ── Border ──────────────────────────────────────────────────────────────────
 
 /// Subtle panel border color.
 pub const BORDER_SUBTLE: Color = Color::srgb(0.26, 0.26, 0.26);
 
 // ── Sizing ──────────────────────────────────────────────────────────────────
 
-/// Diameter (px) of a color wheel widget.
-pub const WHEEL_SIZE: f32 = 140.0;
+/// Diameter (px) of a dial / rotary knob widget.
+pub const DIAL_SIZE: f32 = 40.0;
 
-/// Height (px) of horizontal slider tracks.
-pub const SLIDER_HEIGHT: f32 = 18.0;
+/// Diameter (px) of a primary color wheel.
+pub const WHEEL_SIZE: f32 = 132.0;
+
+/// Horizontal gap (px) between adjacent color wheels.
+pub const WHEEL_GAP: f32 = 10.0;
+
+/// Width (px) reserved for each dial slot in the top/bottom rows.
+pub const DIAL_SLOT_WIDTH: f32 = 78.0;
+
+/// Width (px) of the 4-wheel cluster.
+pub const WHEEL_GROUP_WIDTH: f32 = WHEEL_SIZE * 4.0 + WHEEL_GAP * 3.0;
+
+/// Width (px) of top/bottom dial rows, centered around wheel edge anchors.
+pub const WHEEL_DIAL_ROW_WIDTH: f32 = WHEEL_GROUP_WIDTH + DIAL_SLOT_WIDTH;
+
+/// Additional top margin (px) applied to the top dial row.
+pub const TOP_DIAL_ROW_MARGIN_TOP: f32 = 6.0;
+
+/// Additional top margin (px) applied to the bottom dial row (negative moves up).
+pub const BOTTOM_DIAL_ROW_MARGIN_TOP: f32 = -6.0;
 
 /// Inner padding (px) applied to panels.
 pub const PANEL_PADDING: f32 = 8.0;
 
 /// Bottom panel height (px), similar to Resolve primaries module.
-pub const PRIMARIES_PANEL_HEIGHT: f32 = 380.0;
+pub const PRIMARIES_PANEL_HEIGHT: f32 = 340.0;
 
 // ── Typography ──────────────────────────────────────────────────────────────
 

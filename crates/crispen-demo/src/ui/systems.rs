@@ -1,17 +1,26 @@
 //! ECS systems that synchronize UI state with GradingParams.
 //!
 //! Bidirectional sync:
-//! - Sliders/wheels → `GradingState.params` (user interaction)
-//! - `GradingState.params` → sliders/wheels (external changes like reset)
+//! - Dials/wheels → `GradingState.params` (user interaction)
+//! - `GradingState.params` → dials/wheels (external changes like reset)
+
+use std::path::Path;
 
 use bevy::prelude::*;
 use bevy::ui_render::prelude::MaterialNode;
-use bevy::ui_widgets::{SliderValue, ValueChange};
+use bevy::ui_widgets::ValueChange;
+use bevy::window::PrimaryWindow;
 
-use crispen_bevy::resources::GradingState;
+use crispen_bevy::events::ImageLoadedEvent;
+use crispen_bevy::resources::{GpuPipelineState, GradingState, ImageState};
 
 use super::color_wheel::{ColorWheelMaterial, WheelType};
-use super::components::{ParamId, ParamSlider};
+use super::components::ParamId;
+use super::dial::{DialMaterial, DialRange, DialValue, ParamDial};
+use super::theme;
+use crate::image_loader;
+
+const PARAM_SYNC_EPSILON: f32 = 1e-4;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -47,20 +56,20 @@ fn write_param(state: &mut GradingState, id: ParamId, v: f32) {
     }
 }
 
-// ── Sliders → GradingState ──────────────────────────────────────────────────
+// ── Dials → GradingState ────────────────────────────────────────────────────
 
-/// Sync slider value changes to GradingState parameters.
+/// Sync dial value changes to GradingState parameters.
 ///
-/// Only mutates `GradingState` when the slider value actually differs from
-/// the current param, preventing feedback loops with `sync_params_to_sliders`.
-pub fn sync_sliders_to_params(
-    sliders: Query<(&SliderValue, &ParamSlider), Changed<SliderValue>>,
+/// Only mutates `GradingState` when the dial value actually differs from
+/// the current param, preventing feedback loops with `sync_params_to_dials`.
+pub fn sync_dials_to_params(
+    dials: Query<(&DialValue, &ParamDial), Changed<DialValue>>,
     mut state: ResMut<GradingState>,
 ) {
-    for (value, slider) in sliders.iter() {
-        let current = read_param(&state, slider.0);
-        if (current - value.0).abs() > f32::EPSILON {
-            write_param(&mut state, slider.0, value.0);
+    for (value, dial) in dials.iter() {
+        let current = read_param(&state, dial.0);
+        if (current - value.0).abs() > PARAM_SYNC_EPSILON {
+            write_param(&mut state, dial.0, value.0);
             state.dirty = true;
         }
     }
@@ -114,24 +123,134 @@ pub fn on_wheel_value_change(
     state.dirty = true;
 }
 
-// ── GradingState → Sliders ──────────────────────────────────────────────────
+// ── GradingState → Dials ────────────────────────────────────────────────────
 
-/// Sync GradingState back to slider values when params change externally
+/// Sync GradingState back to dial values when params change externally
 /// (e.g. ResetGrade, AutoBalance).
-pub fn sync_params_to_sliders(
+pub fn sync_params_to_dials(
     state: Res<GradingState>,
-    sliders: Query<(Entity, &ParamSlider, &SliderValue)>,
-    mut commands: Commands,
+    mut dials: Query<(Entity, &ParamDial, &mut DialValue, &DialRange)>,
+    q_material: Query<&MaterialNode<DialMaterial>>,
+    mut materials: ResMut<Assets<DialMaterial>>,
 ) {
     if !state.is_changed() {
         return;
     }
-    for (entity, slider, current) in sliders.iter() {
-        let target = read_param(&state, slider.0);
-        if (current.0 - target).abs() > f32::EPSILON {
-            commands.entity(entity).insert(SliderValue(target));
+    for (entity, dial, mut current, range) in dials.iter_mut() {
+        let target = read_param(&state, dial.0);
+        if (current.0 - target).abs() > PARAM_SYNC_EPSILON {
+            current.0 = target;
+
+            // Update material uniform so the knob visual matches.
+            if let Ok(mat_node) = q_material.get(entity) {
+                if let Some(mat) = materials.get_mut(mat_node.id()) {
+                    let span = range.max - range.min;
+                    mat.value_norm = if span.abs() < f32::EPSILON {
+                        0.5
+                    } else {
+                        ((target - range.min) / span).clamp(0.0, 1.0)
+                    };
+                }
+            }
         }
     }
+}
+
+// ── Image Loading ───────────────────────────────────────────────────────────
+
+/// Open a native file dialog on Ctrl+O and load the selected image into the
+/// grading pipeline.
+pub fn handle_load_image_shortcut(
+    keys: Res<ButtonInput<KeyCode>>,
+    window_q: Query<&Window, With<PrimaryWindow>>,
+    mut image_state: ResMut<ImageState>,
+    mut grading_state: ResMut<GradingState>,
+    gpu: Option<ResMut<GpuPipelineState>>,
+    mut image_loaded: MessageWriter<ImageLoadedEvent>,
+) {
+    let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+    if !(ctrl && keys.just_pressed(KeyCode::KeyO)) {
+        return;
+    }
+
+    let Some(path) = rfd::FileDialog::new()
+        .add_filter("JPEG images", &["jpg", "jpeg"])
+        .set_title("Load Image")
+        .pick_file()
+    else {
+        return;
+    };
+
+    let preview_size = viewer_target_size(&window_q);
+    load_image_from_path(
+        &path,
+        preview_size,
+        &mut image_state,
+        &mut grading_state,
+        gpu,
+        &mut image_loaded,
+    );
+}
+
+/// Load an image file into the grading pipeline.
+fn load_image_from_path(
+    path: &Path,
+    preview_size: Option<(u32, u32)>,
+    image_state: &mut ResMut<ImageState>,
+    grading_state: &mut ResMut<GradingState>,
+    gpu: Option<ResMut<GpuPipelineState>>,
+    image_loaded: &mut MessageWriter<ImageLoadedEvent>,
+) {
+    let image = match image_loader::load_image_for_display(path, preview_size) {
+        Ok(img) => img,
+        Err(e) => {
+            tracing::error!("Failed to load image {}: {e}", path.display());
+            return;
+        }
+    };
+
+    tracing::info!(
+        "Loaded image: {}x{} {:?} from {}",
+        image.width,
+        image.height,
+        image.source_bit_depth,
+        path.display(),
+    );
+
+    let width = image.width;
+    let height = image.height;
+    let bit_depth = format!("{:?}", image.source_bit_depth);
+
+    // Upload to GPU if the pipeline is available.
+    if let Some(mut gpu) = gpu {
+        let handle = gpu.pipeline.upload_image(&image);
+        gpu.source_handle = Some(handle);
+    }
+
+    image_state.source = Some(image);
+    grading_state.dirty = true;
+
+    image_loaded.write(ImageLoadedEvent {
+        width,
+        height,
+        bit_depth,
+    });
+}
+
+fn viewer_target_size(window_q: &Query<&Window, With<PrimaryWindow>>) -> Option<(u32, u32)> {
+    let window = window_q.iter().next()?;
+    let scale = window.resolution.scale_factor();
+    let width = window.width() * scale;
+    let height = window.height() * scale;
+
+    // Match the UI layout: full-width viewer above a fixed-height primaries panel,
+    // with a small margin for panel padding/frame borders.
+    let target_width = (width - 24.0).max(128.0).round() as u32;
+    let target_height = (height - theme::PRIMARIES_PANEL_HEIGHT * scale - 32.0)
+        .max(128.0)
+        .round() as u32;
+
+    Some((target_width, target_height))
 }
 
 // ── GradingState → Wheels ───────────────────────────────────────────────────
@@ -184,6 +303,12 @@ pub fn sync_params_to_wheels(
             if let Some(mat) = materials.get_mut(mat_node.id()) {
                 mat.cursor_x = dx;
                 mat.cursor_y = dy;
+                mat.master = match wheel_type {
+                    WheelType::Lift | WheelType::Offset => {
+                        (channels[3] * 0.5 + 0.5).clamp(0.0, 1.0)
+                    }
+                    WheelType::Gamma | WheelType::Gain => (channels[3] * 0.5).clamp(0.0, 1.0),
+                };
             }
         }
 

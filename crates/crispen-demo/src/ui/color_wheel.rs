@@ -98,15 +98,17 @@ impl UiMaterial for ColorWheelMaterial {
 /// Spawn a color wheel widget for the given channel.
 ///
 /// Emits [`ValueChange<Vec2>`] with values in 0..1 (center = 0.5, 0.5).
-/// The outer container is sized to [`theme::WHEEL_SIZE`].
+/// The wheel body is sized to [`theme::WHEEL_SIZE`] for stable layout.
 pub fn color_wheel(wheel_type: WheelType) -> impl Bundle {
     (
         Node {
             display: Display::Flex,
             flex_direction: FlexDirection::Column,
             align_items: AlignItems::Center,
+            justify_content: JustifyContent::FlexStart,
+            row_gap: Val::Px(3.0),
             width: Val::Px(theme::WHEEL_SIZE),
-            height: Val::Px(theme::WHEEL_SIZE + 24.0),
+            flex_shrink: 0.0,
             ..Default::default()
         },
         wheel_type,
@@ -117,9 +119,13 @@ pub fn color_wheel(wheel_type: WheelType) -> impl Bundle {
                 Node {
                     width: Val::Px(theme::WHEEL_SIZE),
                     height: Val::Px(theme::WHEEL_SIZE),
+                    aspect_ratio: Some(1.0),
+                    border_radius: BorderRadius::MAX,
+                    overflow: Overflow::clip(),
                     ..Default::default()
                 },
                 ColorWheelInner,
+                BackgroundColor(Color::srgb(0.12, 0.12, 0.12)),
                 children![
                     // Thumb dot: positioned absolutely, ignores picking.
                     (

@@ -5,6 +5,7 @@
 
 pub mod color_wheel;
 pub mod components;
+pub mod dial;
 pub mod layout;
 pub mod primaries;
 pub mod systems;
@@ -23,7 +24,7 @@ pub struct CrispenUiPlugin;
 
 impl Plugin for CrispenUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(color_wheel::ColorWheelPlugin)
+        app.add_plugins((color_wheel::ColorWheelPlugin, dial::DialPlugin))
             .add_systems(
                 Startup,
                 (
@@ -36,11 +37,15 @@ impl Plugin for CrispenUiPlugin {
             .add_systems(
                 Update,
                 (
-                    systems::sync_sliders_to_params,
-                    systems::sync_params_to_sliders,
-                    systems::sync_params_to_wheels,
-                    components::update_param_slider_visuals,
+                    (
+                        systems::sync_dials_to_params,
+                        systems::sync_params_to_dials,
+                        systems::sync_params_to_wheels,
+                    )
+                        .chain(),
+                    dial::update_dial_visuals,
                     viewer::update_viewer_texture,
+                    systems::handle_load_image_shortcut,
                 ),
             )
             .add_observer(systems::on_wheel_value_change);

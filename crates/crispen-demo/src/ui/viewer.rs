@@ -2,14 +2,19 @@
 //!
 //! Displays the graded image as a Bevy `ImageNode` that fills the top
 //! portion of the window. The texture is updated each frame the
-//! `ImageState.graded` resource changes.
+//! `ViewerData` resource changes.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use crispen_bevy::resources::ImageState;
+use crispen_bevy::ViewerFormat;
+use crispen_bevy::resources::ViewerData;
 
 use super::theme;
+
+/// Marker for the "Ctrl+O to load" hint text, hidden once an image is loaded.
+#[derive(Component)]
+pub struct LoadHint;
 
 /// Handle to the dynamic Bevy `Image` asset used by the viewer.
 #[derive(Resource)]
@@ -26,8 +31,8 @@ pub fn setup_viewer(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
-        &[0, 0, 0, 0],
-        TextureFormat::Rgba8UnormSrgb,
+        &[0, 0, 0, 0, 0, 0, 0, 0], // 8 bytes for Rgba16Float
+        TextureFormat::Rgba16Float,
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
     );
     let handle = images.add(placeholder);
@@ -93,57 +98,64 @@ pub fn spawn_viewer_panel(parent: &mut ChildSpawnerCommands, handle: Handle<Imag
                         },
                         TextColor(theme::TEXT_DIM),
                     ));
+
+                    frame.spawn((
+                        LoadHint,
+                        Text::new("Ctrl+O to load image"),
+                        TextFont {
+                            font_size: 18.0,
+                            ..default()
+                        },
+                        TextColor(theme::TEXT_DIM),
+                    ));
                 });
         });
 }
 
-/// When `ImageState.graded` changes, re-encode pixels as sRGB u8 and
-/// replace the Bevy `Image` asset so the viewer updates on screen.
+/// When `ViewerData` changes, write the raw pixel bytes directly into the
+/// Bevy `Image` asset. No CPU conversion — data is already f16 or f32
+/// linear-light, and Bevy's renderer handles gamma during compositing.
 pub fn update_viewer_texture(
-    image_state: Res<ImageState>,
+    viewer_data: Res<ViewerData>,
     viewer: Option<Res<ViewerImageHandle>>,
     mut images: ResMut<Assets<Image>>,
+    hints: Query<Entity, With<LoadHint>>,
+    mut commands: Commands,
 ) {
-    if !image_state.is_changed() {
+    if !viewer_data.is_changed() || viewer_data.width == 0 {
         return;
     }
     let Some(viewer) = viewer else { return };
-    let Some(graded) = &image_state.graded else {
-        return;
-    };
 
-    let pixel_count = graded.pixels.len();
-    let mut data = Vec::with_capacity(pixel_count * 4);
-    for px in &graded.pixels {
-        data.push(linear_to_srgb(px[0]));
-        data.push(linear_to_srgb(px[1]));
-        data.push(linear_to_srgb(px[2]));
-        data.push((px[3].clamp(0.0, 1.0) * 255.0 + 0.5) as u8);
+    // Hide the load hint once we have an image.
+    for entity in hints.iter() {
+        commands.entity(entity).despawn();
     }
 
-    let new_image = Image::new(
-        Extent3d {
-            width: graded.width,
-            height: graded.height,
-            depth_or_array_layers: 1,
-        },
-        TextureDimension::D2,
-        data,
-        TextureFormat::Rgba8UnormSrgb,
-        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-    );
+    let texture_format = match viewer_data.format {
+        ViewerFormat::F16 => TextureFormat::Rgba16Float,
+        ViewerFormat::F32 => TextureFormat::Rgba32Float,
+    };
 
     if let Some(existing) = images.get_mut(&viewer.handle) {
-        *existing = new_image;
-    }
-}
+        let new_size = Extent3d {
+            width: viewer_data.width,
+            height: viewer_data.height,
+            depth_or_array_layers: 1,
+        };
 
-/// Convert a single linear-light channel value to sRGB gamma-encoded u8.
-fn linear_to_srgb(c: f32) -> u8 {
-    let s = if c <= 0.0031308 {
-        c * 12.92
-    } else {
-        1.055 * c.powf(1.0 / 2.4) - 0.055
-    };
-    (s.clamp(0.0, 1.0) * 255.0 + 0.5) as u8
+        if existing.texture_descriptor.size != new_size
+            || existing.texture_descriptor.format != texture_format
+        {
+            *existing = Image::new(
+                new_size,
+                TextureDimension::D2,
+                viewer_data.pixel_bytes.clone(),
+                texture_format,
+                RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+            );
+        } else {
+            existing.data = Some(viewer_data.pixel_bytes.clone());
+        }
+    }
 }

@@ -10,6 +10,7 @@ use bevy::prelude::*;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 
+use crate::config::AppConfig;
 use crate::image_loader;
 use crate::ipc::{BevyToUi, UiToBevy};
 use crispen_bevy::events::{ColorGradingCommand, ImageLoadedEvent};
@@ -137,10 +138,7 @@ pub fn spawn_ws_server(
 }
 
 /// Bevy system: sends queued outbound messages over the WebSocket bridge.
-pub fn flush_outbound_messages(
-    mut outbound: ResMut<OutboundUiMessages>,
-    bridge: Res<WsBridge>,
-) {
+pub fn flush_outbound_messages(mut outbound: ResMut<OutboundUiMessages>, bridge: Res<WsBridge>) {
     for msg in outbound.drain() {
         match serde_json::to_string(&msg) {
             Ok(json) => {
@@ -159,6 +157,7 @@ pub fn flush_outbound_messages(
 /// owns the image loader and GPU resource access.
 pub fn poll_inbound_messages(
     mut bridge: ResMut<WsBridge>,
+    config: Res<AppConfig>,
     mut commands: MessageWriter<ColorGradingCommand>,
     mut images: ResMut<ImageState>,
     mut gpu: Option<ResMut<GpuPipelineState>>,
@@ -167,9 +166,11 @@ pub fn poll_inbound_messages(
     mut image_loaded: MessageWriter<ImageLoadedEvent>,
 ) {
     while let Ok(json) = bridge.inbound_rx.try_recv() {
+        let preview_size = preview_target_from_config(&config);
         match serde_json::from_str::<UiToBevy>(&json) {
             Ok(msg) => dispatch_ui_message(
                 msg,
+                preview_size,
                 &mut commands,
                 &mut images,
                 gpu.as_deref_mut(),
@@ -188,6 +189,7 @@ pub fn poll_inbound_messages(
 /// handled directly since it requires file I/O and GPU upload.
 fn dispatch_ui_message(
     msg: UiToBevy,
+    preview_size: Option<(u32, u32)>,
     commands: &mut MessageWriter<ColorGradingCommand>,
     images: &mut ResMut<ImageState>,
     gpu: Option<&mut GpuPipelineState>,
@@ -206,7 +208,15 @@ fn dispatch_ui_message(
             commands.write(ColorGradingCommand::ResetGrade);
         }
         UiToBevy::LoadImage { path } => {
-            handle_load_image(&path, images, gpu, state, outbound, image_loaded);
+            handle_load_image(
+                &path,
+                preview_size,
+                images,
+                gpu,
+                state,
+                outbound,
+                image_loaded,
+            );
         }
         UiToBevy::LoadLut { path, slot } => {
             commands.write(ColorGradingCommand::LoadLut { path, slot });
@@ -229,13 +239,14 @@ fn dispatch_ui_message(
 /// Load an image from disk, upload to GPU, and update ECS state.
 fn handle_load_image(
     path: &str,
+    preview_size: Option<(u32, u32)>,
     images: &mut ResMut<ImageState>,
     gpu: Option<&mut GpuPipelineState>,
     state: &mut ResMut<GradingState>,
     outbound: &mut ResMut<OutboundUiMessages>,
     image_loaded: &mut MessageWriter<ImageLoadedEvent>,
 ) {
-    match image_loader::load_image(Path::new(path)) {
+    match image_loader::load_image_for_display(Path::new(path), preview_size) {
         Ok(img) => {
             let width = img.width;
             let height = img.height;
@@ -270,4 +281,14 @@ fn handle_load_image(
             });
         }
     }
+}
+
+fn preview_target_from_config(config: &AppConfig) -> Option<(u32, u32)> {
+    let width = config.width as f32;
+    let height = config.height as f32;
+    let target_width = (width - 24.0).max(128.0).round() as u32;
+    let target_height = (height - crate::ui::theme::PRIMARIES_PANEL_HEIGHT - 32.0)
+        .max(128.0)
+        .round() as u32;
+    Some((target_width, target_height))
 }
