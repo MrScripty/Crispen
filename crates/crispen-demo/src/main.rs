@@ -1,13 +1,14 @@
 //! Crispen Demo — standalone color grading application.
 //!
-//! Embeds a Bevy renderer with the Crispen plugin and a Svelte UI via wry webview,
-//! communicating over a WebSocket IPC bridge.
+//! Uses Bevy's native UI widgets for a DaVinci Resolve-style interface
+//! with the Crispen grading pipeline and WebSocket IPC bridge.
 
 mod config;
 mod embedded_ui;
 mod image_loader;
 mod ipc;
 mod render;
+mod ui;
 mod ws_bridge;
 
 use bevy::prelude::*;
@@ -17,7 +18,6 @@ use config::AppConfig;
 use crispen_bevy::events::{ParamsUpdatedEvent, ScopeDataReadyEvent};
 use crispen_bevy::resources::{GradingState, ScopeState};
 use crispen_bevy::CrispenPlugin;
-use render::WebviewPlugin;
 use ws_bridge::{OutboundUiMessages, WsBridge};
 
 fn main() {
@@ -53,7 +53,8 @@ fn main() {
                 }),
         )
         .add_plugins(CrispenPlugin)
-        .add_plugins(WebviewPlugin)
+        .add_plugins(bevy::ui_widgets::UiWidgetsPlugins)
+        .add_plugins(ui::CrispenUiPlugin)
         .add_systems(Startup, (setup_camera, send_initial_state))
         .add_systems(
             Update,
