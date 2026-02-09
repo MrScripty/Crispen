@@ -26,6 +26,13 @@ use ws_bridge::{OutboundUiMessages, WsBridge};
 
 fn main() {
     let config = AppConfig::default();
+    tracing::info!(
+        "starting demo: {}x{}, ws_port={}, dev_mode={}",
+        config.width,
+        config.height,
+        config.ws_port,
+        config.dev_mode
+    );
 
     // Spawn WebSocket IPC server
     let (outbound_tx, inbound_rx) = ws_bridge::spawn_ws_server(config.ws_port);
