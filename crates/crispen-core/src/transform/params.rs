@@ -38,6 +38,48 @@ pub enum ColorSpaceId {
     Custom(u32),
 }
 
+impl ColorSpaceId {
+    /// Human-readable label for UI menus and status text.
+    pub const fn label(&self) -> &'static str {
+        match self {
+            Self::Aces2065_1 => "ACES2065-1",
+            Self::AcesCg => "ACEScg",
+            Self::AcesCc => "ACEScc",
+            Self::AcesCct => "ACEScct",
+            Self::Srgb => "sRGB",
+            Self::LinearSrgb => "Linear sRGB",
+            Self::Rec2020 => "Rec.2020",
+            Self::DciP3 => "DCI-P3",
+            Self::ArriLogC3 => "ARRI LogC3",
+            Self::ArriLogC4 => "ARRI LogC4",
+            Self::SLog3 => "Sony S-Log3",
+            Self::RedLog3G10 => "RED Log3G10",
+            Self::VLog => "Panasonic V-Log",
+            Self::Custom(_) => "Custom",
+        }
+    }
+
+    /// Built-in color spaces supported by Crispen's native color-management path.
+    pub fn all() -> &'static [Self] {
+        const ALL: [ColorSpaceId; 13] = [
+            ColorSpaceId::Aces2065_1,
+            ColorSpaceId::AcesCg,
+            ColorSpaceId::AcesCc,
+            ColorSpaceId::AcesCct,
+            ColorSpaceId::Srgb,
+            ColorSpaceId::LinearSrgb,
+            ColorSpaceId::Rec2020,
+            ColorSpaceId::DciP3,
+            ColorSpaceId::ArriLogC3,
+            ColorSpaceId::ArriLogC4,
+            ColorSpaceId::SLog3,
+            ColorSpaceId::RedLog3G10,
+            ColorSpaceId::VLog,
+        ];
+        &ALL
+    }
+}
+
 /// Configuration for color space transforms in the grading pipeline.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ColorManagementConfig {
