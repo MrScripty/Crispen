@@ -1,20 +1,42 @@
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=csrc/ocio_capi.h");
     println!("cargo:rerun-if-changed=csrc/ocio_capi.cpp");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_PREBUILT_DIR");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_SOURCE_DIR");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_INSTALL_EXT_PACKAGES");
+
+    if let Some(prebuilt_dir) = env_path("CRISPEN_OCIO_PREBUILT_DIR") {
+        let include_dir = prebuilt_dir.join("include");
+        let lib_dir = pick_lib_dir(&prebuilt_dir);
+        if !include_dir.exists() || !lib_dir.exists() {
+            panic!(
+                "CRISPEN_OCIO_PREBUILT_DIR is missing include/lib paths: {}",
+                prebuilt_dir.display()
+            );
+        }
+        compile_wrapper(&include_dir);
+        link_ocio(&lib_dir);
+        return;
+    }
 
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("manifest dir"));
-    let ocio_src = manifest_dir.join("../../extern/OpenColorIO");
-
+    let ocio_src = env_path("CRISPEN_OCIO_SOURCE_DIR")
+        .unwrap_or_else(|| manifest_dir.join("../../extern/OpenColorIO"));
     if !ocio_src.exists() {
         panic!(
             "OpenColorIO source not found at {}. Initialize submodules.",
             ocio_src.display()
         );
     }
+
+    let install_ext = env::var("CRISPEN_OCIO_INSTALL_EXT_PACKAGES")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "MISSING".to_string());
 
     let ocio_dst = cmake::Config::new(&ocio_src)
         .define("BUILD_SHARED_LIBS", "ON")
@@ -24,22 +46,26 @@ fn main() {
         .define("OCIO_BUILD_PYTHON", "OFF")
         .define("OCIO_BUILD_JAVA", "OFF")
         .define("OCIO_BUILD_DOCS", "OFF")
-        .define("OCIO_INSTALL_EXT_PACKAGES", "MISSING")
+        .define("OCIO_INSTALL_EXT_PACKAGES", &install_ext)
         .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
         .build();
 
+    compile_wrapper(&ocio_dst.join("include"));
+    link_ocio(&pick_lib_dir(&ocio_dst));
+}
+
+fn compile_wrapper(ocio_include: &Path) {
     cc::Build::new()
         .cpp(true)
         .file("csrc/ocio_capi.cpp")
         .include("csrc")
-        .include(ocio_dst.join("include"))
+        .include(ocio_include)
         .flag_if_supported("-std=c++17")
         .compile("ocio_capi");
+}
 
-    println!(
-        "cargo:rustc-link-search=native={}",
-        ocio_dst.join("lib").display()
-    );
+fn link_ocio(lib_dir: &Path) {
+    println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=OpenColorIO");
 
     if cfg!(target_os = "linux") {
@@ -47,4 +73,23 @@ fn main() {
     } else if cfg!(target_os = "macos") {
         println!("cargo:rustc-link-lib=dylib=c++");
     }
+}
+
+fn env_path(var: &str) -> Option<PathBuf> {
+    env::var(var)
+        .ok()
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+}
+
+fn pick_lib_dir(root: &Path) -> PathBuf {
+    let lib = root.join("lib");
+    if lib.exists() {
+        return lib;
+    }
+    let lib64 = root.join("lib64");
+    if lib64.exists() {
+        return lib64;
+    }
+    lib
 }

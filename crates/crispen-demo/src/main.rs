@@ -82,6 +82,7 @@ fn main() {
 #[cfg(feature = "ocio")]
 fn try_insert_ocio_resource(app: &mut App) {
     let ocio_config = OcioConfig::from_env()
+        .or_else(|_| OcioConfig::builtin("studio-config-v4.0.0_aces-v2.0_ocio-v2.5"))
         .or_else(|_| OcioConfig::builtin("studio-config-v2.2.0_aces-v1.3_ocio-v2.4"));
 
     let Ok(config) = ocio_config else {
