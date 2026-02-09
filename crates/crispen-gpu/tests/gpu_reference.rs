@@ -3,6 +3,7 @@
 //! Run with: `cargo test -p crispen-gpu`
 
 use std::sync::Arc;
+use std::sync::{Mutex, OnceLock};
 
 use crispen_core::image::{BitDepth, GradingImage};
 use crispen_core::transform::params::GradingParams;
@@ -28,6 +29,11 @@ fn create_test_device() -> (Arc<wgpu::Device>, Arc<wgpu::Queue>) {
     (Arc::new(device), Arc::new(queue))
 }
 
+fn gpu_test_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
+}
+
 /// Create a small test gradient image (4x4).
 fn create_test_gradient(width: u32, height: u32) -> GradingImage {
     let mut pixels = Vec::with_capacity((width * height) as usize);
@@ -49,6 +55,7 @@ fn create_test_gradient(width: u32, height: u32) -> GradingImage {
 
 #[test]
 fn test_gpu_lut_bake_identity() {
+    let _lock = gpu_test_lock().lock().expect("gpu test lock poisoned");
     let (device, queue) = create_test_device();
     let mut pipeline = GpuGradingPipeline::new(device.clone(), queue.clone());
 
@@ -69,9 +76,9 @@ fn test_gpu_lut_bake_identity() {
     let image = create_test_gradient(4, 4);
     let source = pipeline.upload_image(&image);
     pipeline.apply_lut(&source);
-
-    let output_handle = pipeline.current_output().expect("output should exist");
-    let result = pipeline.download_image(output_handle);
+    let result = pipeline
+        .download_current_output()
+        .expect("output should exist");
 
     // Compare each pixel.
     let mut max_error: f32 = 0.0;
@@ -92,6 +99,7 @@ fn test_gpu_lut_bake_identity() {
 
 #[test]
 fn test_apply_lut_preserves_alpha() {
+    let _lock = gpu_test_lock().lock().expect("gpu test lock poisoned");
     let (device, queue) = create_test_device();
     let mut pipeline = GpuGradingPipeline::new(device.clone(), queue.clone());
 
@@ -112,7 +120,9 @@ fn test_apply_lut_preserves_alpha() {
 
     let source = pipeline.upload_image(&image);
     pipeline.apply_lut(&source);
-    let result = pipeline.download_image(pipeline.current_output().unwrap());
+    let result = pipeline
+        .download_current_output()
+        .expect("output should exist");
 
     for (i, (src, dst)) in image.pixels.iter().zip(result.pixels.iter()).enumerate() {
         let alpha_err = (src[3] - dst[3]).abs();
@@ -127,6 +137,7 @@ fn test_apply_lut_preserves_alpha() {
 
 #[test]
 fn test_histogram_bins_sum_to_pixel_count() {
+    let _lock = gpu_test_lock().lock().expect("gpu test lock poisoned");
     let (device, queue) = create_test_device();
     let mut pipeline = GpuGradingPipeline::new(device.clone(), queue.clone());
 
@@ -140,7 +151,10 @@ fn test_histogram_bins_sum_to_pixel_count() {
         crispen_core::transform::params::ColorSpaceId::LinearSrgb;
     params.color_management.output_space =
         crispen_core::transform::params::ColorSpaceId::LinearSrgb;
-    let results = pipeline.execute(&source, &params, 17);
+    let frame = pipeline.submit_frame(&source, &params, 17);
+    let results = frame
+        .scopes
+        .expect("submit_frame should include scope readback");
 
     let pixel_count = 16u32 * 16;
 
@@ -156,6 +170,7 @@ fn test_histogram_bins_sum_to_pixel_count() {
 
 #[test]
 fn test_bake_lut_workgroup_coverage() {
+    let _lock = gpu_test_lock().lock().expect("gpu test lock poisoned");
     let (device, queue) = create_test_device();
     let mut pipeline = GpuGradingPipeline::new(device.clone(), queue.clone());
 
@@ -176,7 +191,9 @@ fn test_bake_lut_workgroup_coverage() {
     let image = create_test_gradient(4, 4);
     let source = pipeline.upload_image(&image);
     pipeline.apply_lut(&source);
-    let result = pipeline.download_image(pipeline.current_output().unwrap());
+    let result = pipeline
+        .download_current_output()
+        .expect("output should exist");
 
     // Verify that at least some pixels were actually modified (gain > 1).
     let mut any_different = false;
