@@ -34,7 +34,8 @@ wgpu-based compute pipeline for GPU-accelerated LUT baking, image grading, and s
 ```rust
 use crispen_gpu::GpuGradingPipeline;
 
-let pipeline = GpuGradingPipeline::create_blocking()?;
+let mut pipeline = GpuGradingPipeline::create_blocking()?;
 let source = pipeline.upload_image(&grading_image);
-let scopes = pipeline.execute(&source, &params, 65);
+let frame = pipeline.submit_frame(&source, &params, 65);
+let scopes = frame.scopes.expect("scope readback should be present");
 ```
