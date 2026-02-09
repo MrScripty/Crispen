@@ -144,15 +144,15 @@ pub fn sync_params_to_dials(
             current.0 = target;
 
             // Update material uniform so the knob visual matches.
-            if let Ok(mat_node) = q_material.get(entity) {
-                if let Some(mat) = materials.get_mut(mat_node.id()) {
-                    let span = range.max - range.min;
-                    mat.value_norm = if span.abs() < f32::EPSILON {
-                        0.5
-                    } else {
-                        ((target - range.min) / span).clamp(0.0, 1.0)
-                    };
-                }
+            if let Ok(mat_node) = q_material.get(entity)
+                && let Some(mat) = materials.get_mut(mat_node.id())
+            {
+                let span = range.max - range.min;
+                mat.value_norm = if span.abs() < f32::EPSILON {
+                    0.5
+                } else {
+                    ((target - range.min) / span).clamp(0.0, 1.0)
+                };
             }
         }
     }
@@ -313,17 +313,15 @@ pub fn sync_params_to_wheels(
         };
 
         // Update material cursor uniforms (shader expects -1..1).
-        if let Ok(mat_node) = q_material.get(inner_ent) {
-            if let Some(mat) = materials.get_mut(mat_node.id()) {
-                mat.cursor_x = dx;
-                mat.cursor_y = dy;
-                mat.master = match wheel_type {
-                    WheelType::Lift | WheelType::Offset => {
-                        (channels[3] * 0.5 + 0.5).clamp(0.0, 1.0)
-                    }
-                    WheelType::Gamma | WheelType::Gain => (channels[3] * 0.5).clamp(0.0, 1.0),
-                };
-            }
+        if let Ok(mat_node) = q_material.get(inner_ent)
+            && let Some(mat) = materials.get_mut(mat_node.id())
+        {
+            mat.cursor_x = dx;
+            mat.cursor_y = dy;
+            mat.master = match wheel_type {
+                WheelType::Lift | WheelType::Offset => (channels[3] * 0.5 + 0.5).clamp(0.0, 1.0),
+                WheelType::Gamma | WheelType::Gain => (channels[3] * 0.5).clamp(0.0, 1.0),
+            };
         }
 
         // Update thumb position (first child of inner node).

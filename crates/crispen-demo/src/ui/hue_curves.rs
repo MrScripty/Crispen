@@ -485,6 +485,7 @@ fn on_curve_thumb_drag_cancel(
     drag_state.active = false;
 }
 
+#[allow(clippy::type_complexity)]
 fn handle_curve_mode_buttons(
     interactions: Query<(&Interaction, &HueCurveModeButton), (Changed<Interaction>, With<Button>)>,
     mut state: ResMut<HueCurvesState>,
@@ -610,6 +611,7 @@ fn sync_hue_curves_to_grading_params(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn sync_curve_visuals(
     state: Res<HueCurvesState>,
     mut thumbs: Query<

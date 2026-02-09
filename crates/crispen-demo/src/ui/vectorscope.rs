@@ -312,6 +312,7 @@ pub fn spawn_vectorscope_panel(parent: &mut ChildSpawnerCommands, handle: Handle
 }
 
 /// Handle interactions for the scope dropdown toggle and options.
+#[allow(clippy::type_complexity)]
 pub fn handle_scope_dropdown_interactions(
     button_interactions: Query<&Interaction, (Changed<Interaction>, With<ScopeDropdownButton>)>,
     option_interactions: Query<
@@ -335,6 +336,7 @@ pub fn handle_scope_dropdown_interactions(
 }
 
 /// Keep dropdown label/menu visuals in sync with [`ScopeViewState`].
+#[allow(clippy::type_complexity)]
 pub fn sync_scope_dropdown_ui(
     state: Res<ScopeViewState>,
     mut ui_parts: ParamSet<(
@@ -369,6 +371,7 @@ pub fn sync_scope_dropdown_ui(
 }
 
 /// Render the selected scope mode into the shared scope image.
+#[allow(clippy::type_complexity)]
 pub fn update_scope_texture(
     scope_state: Res<ScopeState>,
     view_state: Res<ScopeViewState>,
@@ -581,8 +584,8 @@ fn render_waveform(data: &WaveformData) -> Option<(u32, u32, Vec<u8>)> {
 
     let log_peak = (peak + 1.0).ln();
     let mut rgba = vec![0u8; out_total * 4];
-    for idx in 0..out_total {
-        let r = ((accum[0][idx] + 1.0).ln() / log_peak).clamp(0.0, 1.0);
+    for (idx, out_r) in accum[0].iter().enumerate().take(out_total) {
+        let r = ((*out_r + 1.0).ln() / log_peak).clamp(0.0, 1.0);
         let g = ((accum[1][idx] + 1.0).ln() / log_peak).clamp(0.0, 1.0);
         let b = ((accum[2][idx] + 1.0).ln() / log_peak).clamp(0.0, 1.0);
 
@@ -640,13 +643,13 @@ fn render_parade(data: &WaveformData) -> Option<(u32, u32, Vec<u8>)> {
     let total = (width * height) as usize;
     let mut rgba = vec![0u8; total * 4];
 
-    for ch in 0..3 {
+    for (ch, channel) in accum.iter().enumerate() {
         let x_offset = ch as u32 * panel_width;
         for y in 0..height {
             for x in 0..panel_width {
                 let dst_idx = (y * width + x + x_offset) as usize;
                 let src_idx = (y * panel_width + x) as usize;
-                let signal = ((accum[ch][src_idx] + 1.0).ln() / log_peak).clamp(0.0, 1.0);
+                let signal = ((channel[src_idx] + 1.0).ln() / log_peak).clamp(0.0, 1.0);
 
                 let (r, g, b) = match ch {
                     0 => (signal, 0.0, 0.0),

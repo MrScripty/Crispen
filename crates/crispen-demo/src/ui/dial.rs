@@ -274,11 +274,11 @@ fn on_dial_drag(
         }
 
         // Update material uniform immediately for visual feedback.
-        if let Ok(mat_node) = q_material.get(drag.entity) {
-            if let Some(mat) = materials.get_mut(mat_node.id()) {
-                mat.value_norm = normalize_value(snapped, range.min, range.max);
-                mat.is_active = 1.0;
-            }
+        if let Ok(mat_node) = q_material.get(drag.entity)
+            && let Some(mat) = materials.get_mut(mat_node.id())
+        {
+            mat.value_norm = normalize_value(snapped, range.min, range.max);
+            mat.is_active = 1.0;
         }
     }
 }
@@ -293,10 +293,10 @@ fn on_dial_drag_end(
         drag_end.propagate(false);
         state.active = false;
 
-        if let Ok(mat_node) = q_material.get(drag_end.entity) {
-            if let Some(mat) = materials.get_mut(mat_node.id()) {
-                mat.is_active = 0.0;
-            }
+        if let Ok(mat_node) = q_material.get(drag_end.entity)
+            && let Some(mat) = materials.get_mut(mat_node.id())
+        {
+            mat.is_active = 0.0;
         }
     }
 }
@@ -310,10 +310,10 @@ fn on_dial_drag_cancel(
     if let Ok(mut state) = q_dials.get_mut(drag_cancel.entity) {
         state.active = false;
 
-        if let Ok(mat_node) = q_material.get(drag_cancel.entity) {
-            if let Some(mat) = materials.get_mut(mat_node.id()) {
-                mat.is_active = 0.0;
-            }
+        if let Ok(mat_node) = q_material.get(drag_cancel.entity)
+            && let Some(mat) = materials.get_mut(mat_node.id())
+        {
+            mat.is_active = 0.0;
         }
     }
 }
@@ -348,10 +348,10 @@ pub fn update_dial_visuals(
 ) {
     for (dial_ent, value, range) in dials.iter() {
         // Update material.
-        if let Ok(mat_node) = q_material.get(dial_ent) {
-            if let Some(mat) = materials.get_mut(mat_node.id()) {
-                mat.value_norm = normalize_value(value.0, range.min, range.max);
-            }
+        if let Ok(mat_node) = q_material.get(dial_ent)
+            && let Some(mat) = materials.get_mut(mat_node.id())
+        {
+            mat.value_norm = normalize_value(value.0, range.min, range.max);
         }
     }
 

@@ -9,6 +9,7 @@ use image::imageops::FilterType;
 ///
 /// Supports common formats via the `image` crate (PNG, JPEG, TIFF, EXR).
 /// All images are converted to RGBA f32 linear internally.
+#[allow(dead_code)]
 pub fn load_image(path: &Path) -> Result<GradingImage, ImageLoadError> {
     load_image_for_display(path, None)
 }

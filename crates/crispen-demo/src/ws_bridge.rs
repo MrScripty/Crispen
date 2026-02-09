@@ -157,6 +157,7 @@ pub fn flush_outbound_messages(mut outbound: ResMut<OutboundUiMessages>, bridge:
 /// `LoadImage` is handled directly here (loading the file and uploading
 /// to the GPU) rather than forwarded as a command, because the demo crate
 /// owns the image loader and GPU resource access.
+#[allow(clippy::too_many_arguments)]
 pub fn poll_inbound_messages(
     mut bridge: ResMut<WsBridge>,
     config: Res<AppConfig>,
@@ -192,6 +193,7 @@ pub fn poll_inbound_messages(
 ///
 /// Most messages become `ColorGradingCommand` events. `LoadImage` is
 /// handled directly since it requires file I/O and GPU upload.
+#[allow(clippy::too_many_arguments)]
 fn dispatch_ui_message(
     msg: UiToBevy,
     preview_size: Option<(u32, u32)>,
@@ -301,8 +303,8 @@ fn handle_load_image(
 }
 
 fn preview_target_from_config(config: &AppConfig) -> Option<(u32, u32)> {
-    let width = config.width as f32;
-    let height = config.height as f32;
+    let width = config.width;
+    let height = config.height;
     let target_width = (width - 24.0).max(128.0).round() as u32;
     let target_height = (height - crate::ui::theme::PRIMARIES_PANEL_HEIGHT - 32.0)
         .max(128.0)
