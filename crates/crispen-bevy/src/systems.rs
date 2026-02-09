@@ -161,8 +161,7 @@ pub fn submit_gpu_work(
     perf.updates += 1;
     perf.total_time = submit_time;
 
-    if submit_time >= perf.slow_update_threshold
-        || perf.last_log_at.elapsed().as_secs_f32() >= 1.0
+    if submit_time >= perf.slow_update_threshold || perf.last_log_at.elapsed().as_secs_f32() >= 1.0
     {
         tracing::info!(
             "gpu submit: {:.2}ms (update #{})",

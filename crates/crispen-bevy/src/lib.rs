@@ -20,7 +20,9 @@ use resources::{
     GpuPipelineState, GradingState, ImageState, PipelinePerfStats, ScopeConfig, ScopeState,
     ViewerData,
 };
-use systems::{consume_gpu_results, detect_param_changes, handle_grading_commands, submit_gpu_work};
+use systems::{
+    consume_gpu_results, detect_param_changes, handle_grading_commands, submit_gpu_work,
+};
 
 /// Main Bevy plugin for the Crispen color grading pipeline.
 ///
