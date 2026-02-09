@@ -8,11 +8,12 @@ pub mod components;
 pub mod dial;
 pub mod hue_curves;
 pub mod layout;
-#[cfg(feature = "ocio")]
-pub mod ocio_controls;
+pub mod ofx_panel;
 pub mod primaries;
+pub mod split_viewer;
 pub mod systems;
 pub mod theme;
+pub mod toolbar;
 pub mod vectorscope;
 pub mod viewer;
 
@@ -33,12 +34,15 @@ impl Plugin for CrispenUiPlugin {
             dial::DialPlugin,
             hue_curves::HueCurvesPlugin,
         ))
+        .init_resource::<toolbar::ToolbarState>()
         .init_resource::<vectorscope::ScopeViewState>()
         .add_systems(
             Startup,
             (
                 setup_ui_camera,
                 viewer::setup_viewer,
+                split_viewer::setup_source_image,
+                ofx_panel::setup_ofx_registry,
                 vectorscope::setup_vectorscope,
                 layout::spawn_root_layout,
             )
@@ -55,22 +59,21 @@ impl Plugin for CrispenUiPlugin {
                     .chain(),
                 dial::update_dial_visuals,
                 viewer::update_viewer_texture,
+                split_viewer::update_source_texture,
+                split_viewer::toggle_split_view,
+                toolbar::handle_toolbar_interactions,
+                toolbar::handle_toolbar_toggles,
+                toolbar::handle_toolbar_shortcuts,
+                toolbar::rebuild_toolbar_menus,
+                toolbar::sync_toolbar_ui,
+                ofx_panel::toggle_ofx_panel,
                 vectorscope::handle_scope_dropdown_interactions,
                 vectorscope::sync_scope_dropdown_ui,
                 vectorscope::update_scope_texture,
                 systems::handle_load_image_shortcut,
-                #[cfg(feature = "ocio")]
-                ocio_controls::handle_ocio_dropdown_interactions,
-                #[cfg(feature = "ocio")]
-                ocio_controls::rebuild_ocio_dropdown_menus,
-                #[cfg(feature = "ocio")]
-                ocio_controls::sync_ocio_dropdown_ui,
             ),
         )
         .add_observer(systems::on_wheel_value_change);
-
-        #[cfg(feature = "ocio")]
-        app.init_resource::<ocio_controls::OcioDropdownUiState>();
     }
 }
 

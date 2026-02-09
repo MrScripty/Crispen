@@ -10,6 +10,7 @@ use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use crispen_bevy::ViewerFormat;
 use crispen_bevy::resources::ViewerData;
 
+use super::split_viewer::GradedImageNode;
 use super::theme;
 
 /// Marker for the "Ctrl+O to load" hint text, hidden once an image is loaded.
@@ -76,6 +77,7 @@ pub fn spawn_viewer_panel(parent: &mut ChildSpawnerCommands, handle: Handle<Imag
                 ))
                 .with_children(|frame| {
                     frame.spawn((
+                        GradedImageNode,
                         ImageNode::new(handle).with_mode(NodeImageMode::Auto),
                         Node {
                             max_width: Val::Percent(100.0),

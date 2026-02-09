@@ -18,8 +18,6 @@ use super::color_wheel::{WheelType, color_wheel};
 use super::components::{ParamId, param_default, param_label, param_range, param_step};
 use super::dial::{DialLabelPosition, spawn_param_dial};
 use super::hue_curves;
-#[cfg(feature = "ocio")]
-use super::ocio_controls;
 use super::theme;
 use super::vectorscope;
 
@@ -61,8 +59,6 @@ pub fn spawn_primaries_panel(parent: &mut ChildSpawnerCommands, vectorscope_hand
                         },
                         TextColor(theme::TEXT_PRIMARY),
                     ));
-                    #[cfg(feature = "ocio")]
-                    ocio_controls::spawn_ocio_controls(primaries);
                     spawn_top_dials(primaries);
                     spawn_wheels_row(primaries);
                     spawn_bottom_dials(primaries);

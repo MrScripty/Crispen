@@ -2014,9 +2014,11 @@ name = "crispen-demo"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bytemuck",
  "crispen-bevy",
  "crispen-core",
  "crispen-ocio",
+ "crispen-ofx",
  "futures-util",
  "image",
  "rfd",

@@ -11,6 +11,7 @@ ocio = ["crispen-bevy/ocio", "dep:crispen-ocio"]
 [dependencies]
 crispen-core = { path = "../crispen-core" }
 crispen-bevy = { path = "../crispen-bevy" }
+crispen-ofx = { path = "../crispen-ofx" }
 crispen-ocio = { path = "../crispen-ocio", optional = true }
 bevy = { workspace = true, features = [
     "bevy_core_pipeline",
@@ -38,6 +39,7 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 image = { workspace = true }
 rfd = { workspace = true }
+bytemuck = { workspace = true }
 
 [lints]
 workspace = true

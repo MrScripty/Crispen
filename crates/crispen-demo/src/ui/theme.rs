@@ -84,6 +84,18 @@ pub const PANEL_PADDING: f32 = 8.0;
 /// Bottom panel height (px), similar to Resolve primaries module.
 pub const PRIMARIES_PANEL_HEIGHT: f32 = 340.0;
 
+/// Top toolbar height (px).
+pub const TOOLBAR_HEIGHT: f32 = 36.0;
+
+/// Width (px) of the collapsible OFX side panel.
+pub const OFX_PANEL_WIDTH: f32 = 280.0;
+
+/// Width (px) of toolbar dropdown controls.
+pub const TOOLBAR_DROPDOWN_WIDTH: f32 = 180.0;
+
+/// Active background for toggle buttons.
+pub const BG_TOGGLE_ACTIVE: Color = Color::srgb(0.30, 0.30, 0.30);
+
 /// Background color for the hue-vs-curves plot area.
 pub const CURVE_PLOT_BG: Color = Color::srgb(0.14, 0.14, 0.14);
 
