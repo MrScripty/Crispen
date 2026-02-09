@@ -16,6 +16,14 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_ZLIB_ROOT");
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_ZLIB_LIBRARY");
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_ZLIB_INCLUDE_DIR");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_SKIP_NATIVE_BUILD");
+
+    if env_truthy("CRISPEN_OCIO_SKIP_NATIVE_BUILD") {
+        println!(
+            "cargo:warning=CRISPEN_OCIO_SKIP_NATIVE_BUILD=1: skipping OpenColorIO native build (check-only mode)"
+        );
+        return;
+    }
 
     if let Some(prebuilt_dir) = env_path("CRISPEN_OCIO_PREBUILT_DIR") {
         let include_dir = prebuilt_dir.join("include");
@@ -41,10 +49,16 @@ fn main() {
         );
     }
 
-    let install_ext = env::var("CRISPEN_OCIO_INSTALL_EXT_PACKAGES")
-        .ok()
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "MISSING".to_string());
+    if let Some(requested) = env_string("CRISPEN_OCIO_INSTALL_EXT_PACKAGES")
+        && !requested.eq_ignore_ascii_case("NONE")
+    {
+        panic!(
+            "CRISPEN_OCIO_INSTALL_EXT_PACKAGES={requested} is not supported.\n\
+             crispen-ocio enforces OCIO_INSTALL_EXT_PACKAGES=NONE for offline/reproducible builds.\n\
+             Provide dependencies locally (system packages or CRISPEN_OCIO_* hints), or use CRISPEN_OCIO_PREBUILT_DIR."
+        );
+    }
+    let install_ext = "NONE";
 
     let mut cmake_cfg = cmake::Config::new(&ocio_src);
     cmake_cfg
@@ -55,7 +69,7 @@ fn main() {
         .define("OCIO_BUILD_PYTHON", "OFF")
         .define("OCIO_BUILD_JAVA", "OFF")
         .define("OCIO_BUILD_DOCS", "OFF")
-        .define("OCIO_INSTALL_EXT_PACKAGES", &install_ext)
+        .define("OCIO_INSTALL_EXT_PACKAGES", install_ext)
         .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON");
     apply_dependency_hints(&mut cmake_cfg);
 
@@ -95,6 +109,13 @@ fn env_path(var: &str) -> Option<PathBuf> {
 
 fn env_string(var: &str) -> Option<String> {
     env::var(var).ok().filter(|v| !v.is_empty())
+}
+
+fn env_truthy(var: &str) -> bool {
+    matches!(
+        env::var(var).ok().as_deref(),
+        Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("YES")
+    )
 }
 
 fn apply_dependency_hints(cfg: &mut cmake::Config) {
