@@ -1,0 +1,3 @@
+[submodule "extern/OpenColorIO"]
+	path = extern/OpenColorIO
+	url = /media/jeremy/OrangeCream/Linux Software/OpenColorIO
