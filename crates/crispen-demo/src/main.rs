@@ -4,11 +4,9 @@
 //! with the Crispen grading pipeline and WebSocket IPC bridge.
 
 mod config;
-mod embedded_ui;
 mod image_loader;
 mod ipc;
 mod ocio_support;
-mod render;
 mod ui;
 mod ws_bridge;
 
