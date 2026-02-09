@@ -39,6 +39,8 @@ pub fn required_features() -> wgpu::Features {
 pub struct GpuGradingPipeline {
     device: Arc<wgpu::Device>,
     queue: Arc<wgpu::Queue>,
+    adapter_backend: wgpu::Backend,
+    enabled_features: wgpu::Features,
     lut_baker: LutBaker,
     lut_applicator: LutApplicator,
     format_converter: FormatConverter,
@@ -72,20 +74,38 @@ impl GpuGradingPipeline {
             force_fallback_adapter: false,
         }))
         .map_err(|e| format!("no suitable GPU adapter found: {e}"))?;
+        let adapter_backend = adapter.get_info().backend;
+        let required_features = required_features();
 
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("crispen_compute_device"),
-            required_features: required_features(),
+            required_features,
             required_limits: wgpu::Limits::default(),
             ..Default::default()
         }))
         .map_err(|e| format!("failed to create GPU device: {e}"))?;
+        let enabled_features = device.features();
 
-        Ok(Self::new(Arc::new(device), Arc::new(queue)))
+        Ok(Self::new_with_metadata(
+            Arc::new(device),
+            Arc::new(queue),
+            adapter_backend,
+            enabled_features,
+        ))
     }
 
     /// Create the full GPU pipeline. Compiles all shaders.
     pub fn new(device: Arc<wgpu::Device>, queue: Arc<wgpu::Queue>) -> Self {
+        let enabled_features = device.features();
+        Self::new_with_metadata(device, queue, wgpu::Backend::Noop, enabled_features)
+    }
+
+    fn new_with_metadata(
+        device: Arc<wgpu::Device>,
+        queue: Arc<wgpu::Queue>,
+        adapter_backend: wgpu::Backend,
+        enabled_features: wgpu::Features,
+    ) -> Self {
         let lut_baker = LutBaker::new(&device, &queue);
         let lut_applicator = LutApplicator::new(&device);
         let format_converter = FormatConverter::new(&device);
@@ -94,6 +114,8 @@ impl GpuGradingPipeline {
         Self {
             device,
             queue,
+            adapter_backend,
+            enabled_features,
             lut_baker,
             lut_applicator,
             format_converter,
@@ -110,6 +132,16 @@ impl GpuGradingPipeline {
             last_async_height: 0,
             last_async_viewer_byte_size: 0,
         }
+    }
+
+    /// Access the backend used by the underlying adapter (when known).
+    pub fn adapter_backend(&self) -> wgpu::Backend {
+        self.adapter_backend
+    }
+
+    /// Access the enabled features on the underlying device.
+    pub fn enabled_features(&self) -> wgpu::Features {
+        self.enabled_features
     }
 
     /// Access the wgpu device.

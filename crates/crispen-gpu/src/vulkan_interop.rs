@@ -63,20 +63,20 @@ impl VulkanInterop {
         wgpu::Features::empty()
     }
 
-    /// Probe interop capabilities for a given adapter/device pair.
+    /// Probe interop capabilities for a given backend/device pair.
     pub fn probe(
-        adapter_info: &wgpu::AdapterInfo,
+        backend: wgpu::Backend,
         device: &wgpu::Device,
         enabled_features: wgpu::Features,
     ) -> VulkanInteropCapabilities {
-        let is_vulkan_backend = adapter_info.backend == wgpu::Backend::Vulkan;
+        let is_vulkan_backend = backend == wgpu::Backend::Vulkan;
         let has_vulkan_hal_access = unsafe { device.as_hal::<wgpu::hal::api::Vulkan>() }.is_some();
         let supports_d3d11_win32_import = is_vulkan_backend
             && has_vulkan_hal_access
             && enabled_features.contains(wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32);
 
         VulkanInteropCapabilities {
-            backend: adapter_info.backend,
+            backend,
             is_vulkan_backend,
             has_vulkan_hal_access,
             supports_d3d11_win32_import,
@@ -273,17 +273,8 @@ mod tests {
 
     #[test]
     fn probe_marks_non_vulkan_backend_unavailable() {
-        let adapter_info = wgpu::AdapterInfo {
-            name: "test".to_string(),
-            vendor: 0,
-            device: 0,
-            device_type: wgpu::DeviceType::Cpu,
-            driver: "test".to_string(),
-            driver_info: "test".to_string(),
-            backend: wgpu::Backend::Gl,
-        };
         let caps = VulkanInteropCapabilities {
-            backend: adapter_info.backend,
+            backend: wgpu::Backend::Gl,
             is_vulkan_backend: false,
             has_vulkan_hal_access: false,
             supports_d3d11_win32_import: false,
