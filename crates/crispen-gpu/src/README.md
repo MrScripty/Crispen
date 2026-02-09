@@ -15,7 +15,7 @@ wgpu-based compute pipeline for GPU-accelerated LUT baking, image grading, and s
 | `scope_dispatch.rs` | `ScopeDispatch` — dispatches histogram, waveform, vectorscope, CIE compute shaders |
 | `buffers.rs` | `GpuImageHandle`, `GpuLutHandle`, `ScopeBuffers`, `ScopeConfig` — GPU buffer management |
 | `readback.rs` | `Readback`, `ScopeResults` — staging buffer mapping for GPU-to-CPU data transfer |
-| `vulkan_interop.rs` | Placeholder for Vulkan external memory interop (Phase 3) |
+| `vulkan_interop.rs` | Vulkan interop capability probing + platform-gated external texture import API |
 
 ## Design Decisions
 
