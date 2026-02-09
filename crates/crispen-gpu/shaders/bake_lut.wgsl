@@ -15,9 +15,13 @@ struct GradingParamsGpu {
     saturation: f32,
     hue_deg: f32,
     luma_mix: f32,
+    use_ocio: u32,
     input_space: u32,
     working_space: u32,
     output_space: u32,
+    _pad0: u32,
+    _pad1: u32,
+    _pad2: u32,
 };
 
 @group(0) @binding(0) var lut_data: texture_storage_3d<rgba32float, write>;
@@ -28,6 +32,9 @@ struct GradingParamsGpu {
 @group(0) @binding(5) var curve_lum_vs_sat: texture_1d<f32>;
 @group(0) @binding(6) var curve_sat_vs_sat: texture_1d<f32>;
 @group(0) @binding(7) var curve_sampler: sampler;
+@group(0) @binding(8) var ocio_idt_lut: texture_3d<f32>;
+@group(0) @binding(9) var ocio_odt_lut: texture_3d<f32>;
+@group(0) @binding(10) var ocio_sampler: sampler;
 
 // ── Color space matrices (to/from CIE XYZ D65) ─────────────────────
 
@@ -297,6 +304,10 @@ fn xyz_to_gamut(v: vec3<f32>, space: u32) -> vec3<f32> {
 }
 
 fn input_transform(v: vec3<f32>, from_space: u32, to_space: u32) -> vec3<f32> {
+    if (params.use_ocio == 1u) {
+        let clamped = clamp(v, vec3(0.0), vec3(1.0));
+        return textureSampleLevel(ocio_idt_lut, ocio_sampler, clamped, 0.0).rgb;
+    }
     var lin = linearize(v, from_space);
     if (from_space == to_space) { return lin; }
     let xyz = gamut_to_xyz(lin, from_space);
@@ -304,6 +315,10 @@ fn input_transform(v: vec3<f32>, from_space: u32, to_space: u32) -> vec3<f32> {
 }
 
 fn output_transform(v: vec3<f32>, from_space: u32, to_space: u32) -> vec3<f32> {
+    if (params.use_ocio == 1u) {
+        let clamped = clamp(v, vec3(0.0), vec3(1.0));
+        return textureSampleLevel(ocio_odt_lut, ocio_sampler, clamped, 0.0).rgb;
+    }
     var out = v;
     if (from_space != to_space) {
         let xyz = gamut_to_xyz(out, from_space);

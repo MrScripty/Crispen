@@ -536,6 +536,17 @@ impl GpuGradingPipeline {
         self.async_readback = None;
     }
 
+    /// Upload optional OCIO IDT/ODT LUT textures used by `bake_lut.wgsl`.
+    pub fn set_ocio_luts(
+        &mut self,
+        idt_lut: Option<&[[f32; 4]]>,
+        odt_lut: Option<&[[f32; 4]]>,
+        size: u32,
+    ) {
+        self.lut_baker
+            .set_ocio_luts(&self.device, &self.queue, idt_lut, odt_lut, size);
+    }
+
     /// Get a reference to the current output image, if any.
     pub fn current_output(&self) -> Option<&GpuImageHandle> {
         self.current_output.as_ref()

@@ -25,7 +25,7 @@ pub use readback::ScopeResults;
 ///
 /// WGSL uniform buffers require 16-byte alignment for `vec4<f32>`.
 /// Layout: 4 vec4s (64 bytes) then scalars in groups of 4 (16 bytes each)
-/// then color space IDs. Total: 112 bytes.
+/// then color space IDs and OCIO flag. Total: 128 bytes.
 ///
 /// The `Vec` curve fields from [`GradingParams`] are excluded — they are
 /// baked to 1D textures on the CPU and bound separately.
@@ -52,14 +52,20 @@ pub struct GradingParamsGpu {
 
     // Scalar group 3 (16 bytes) — luma_mix + color space IDs as u32
     pub luma_mix: f32,
+    pub use_ocio: u32,
     pub input_space: u32,
     pub working_space: u32,
+
+    // Scalar group 4 (16 bytes)
     pub output_space: u32,
+    pub _pad0: u32,
+    pub _pad1: u32,
+    pub _pad2: u32,
 }
 
 impl GradingParamsGpu {
     /// Convert from the core [`GradingParams`] to the GPU-compatible layout.
-    pub fn from_params(params: &GradingParams) -> Self {
+    pub fn from_params(params: &GradingParams, use_ocio: bool) -> Self {
         Self {
             lift: params.lift,
             gamma: params.gamma,
@@ -74,9 +80,13 @@ impl GradingParamsGpu {
             saturation: params.saturation,
             hue: params.hue,
             luma_mix: params.luma_mix,
+            use_ocio: u32::from(use_ocio),
             input_space: color_space_to_u32(&params.color_management.input_space),
             working_space: color_space_to_u32(&params.color_management.working_space),
             output_space: color_space_to_u32(&params.color_management.output_space),
+            _pad0: 0,
+            _pad1: 0,
+            _pad2: 0,
         }
     }
 }

@@ -19,6 +19,12 @@ pub struct LutBaker {
     curve_textures: [wgpu::Texture; 4],
     curve_views: [wgpu::TextureView; 4],
     curve_sampler: wgpu::Sampler,
+    ocio_idt_texture: wgpu::Texture,
+    ocio_idt_view: wgpu::TextureView,
+    ocio_odt_texture: wgpu::Texture,
+    ocio_odt_view: wgpu::TextureView,
+    ocio_sampler: wgpu::Sampler,
+    use_ocio: bool,
 }
 
 impl LutBaker {
@@ -79,6 +85,17 @@ impl LutBaker {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                // binding 8: optional OCIO IDT 3D LUT texture
+                ocio_lut_texture_layout_entry(8),
+                // binding 9: optional OCIO ODT 3D LUT texture
+                ocio_lut_texture_layout_entry(9),
+                // binding 10: sampler for OCIO LUTs
+                wgpu::BindGroupLayoutEntry {
+                    binding: 10,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
             ],
         });
 
@@ -126,6 +143,21 @@ impl LutBaker {
             ..Default::default()
         });
 
+        let ocio_idt_texture = create_identity_ocio_lut_texture(device, queue, "crispen_ocio_idt");
+        let ocio_idt_view = ocio_idt_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let ocio_odt_texture = create_identity_ocio_lut_texture(device, queue, "crispen_ocio_odt");
+        let ocio_odt_view = ocio_odt_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let ocio_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("crispen_ocio_lut_sampler"),
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        });
+
         Self {
             pipeline,
             bind_group_layout,
@@ -134,7 +166,45 @@ impl LutBaker {
             curve_textures,
             curve_views,
             curve_sampler,
+            ocio_idt_texture,
+            ocio_idt_view,
+            ocio_odt_texture,
+            ocio_odt_view,
+            ocio_sampler,
+            use_ocio: false,
         }
+    }
+
+    /// Upload OCIO IDT/ODT LUT data. Passing `None` disables OCIO sampling.
+    pub fn set_ocio_luts(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        idt_lut: Option<&[[f32; 4]]>,
+        odt_lut: Option<&[[f32; 4]]>,
+        size: u32,
+    ) {
+        let expected_len = size as usize * size as usize * size as usize;
+        let Some(idt) = idt_lut else {
+            self.use_ocio = false;
+            return;
+        };
+        let Some(odt) = odt_lut else {
+            self.use_ocio = false;
+            return;
+        };
+        if size < 2 || idt.len() != expected_len || odt.len() != expected_len {
+            self.use_ocio = false;
+            return;
+        }
+
+        let idt_tex = write_ocio_lut_texture(device, queue, idt, size, "crispen_ocio_idt");
+        let odt_tex = write_ocio_lut_texture(device, queue, odt, size, "crispen_ocio_odt");
+        self.ocio_idt_view = idt_tex.create_view(&wgpu::TextureViewDescriptor::default());
+        self.ocio_odt_view = odt_tex.create_view(&wgpu::TextureViewDescriptor::default());
+        self.ocio_idt_texture = idt_tex;
+        self.ocio_odt_texture = odt_tex;
+        self.use_ocio = true;
     }
 
     /// Upload curve data from `GradingParams` as 1D textures.
@@ -173,7 +243,7 @@ impl LutBaker {
         lut: &GpuLutHandle,
         encoder: &mut wgpu::CommandEncoder,
     ) {
-        let gpu_params = GradingParamsGpu::from_params(params);
+        let gpu_params = GradingParamsGpu::from_params(params, self.use_ocio);
         queue.write_buffer(&self.params_buffer, 0, bytemuck::bytes_of(&gpu_params));
 
         let size_bytes = [lut.size, 0u32, 0u32, 0u32];
@@ -215,6 +285,18 @@ impl LutBaker {
                     binding: 7,
                     resource: wgpu::BindingResource::Sampler(&self.curve_sampler),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 8,
+                    resource: wgpu::BindingResource::TextureView(&self.ocio_idt_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 9,
+                    resource: wgpu::BindingResource::TextureView(&self.ocio_odt_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 10,
+                    resource: wgpu::BindingResource::Sampler(&self.ocio_sampler),
+                },
             ],
         });
 
@@ -242,6 +324,19 @@ fn curve_texture_layout_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
         ty: wgpu::BindingType::Texture {
             sample_type: wgpu::TextureSampleType::Float { filterable: true },
             view_dimension: wgpu::TextureViewDimension::D1,
+            multisampled: false,
+        },
+        count: None,
+    }
+}
+
+fn ocio_lut_texture_layout_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::COMPUTE,
+        ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+            view_dimension: wgpu::TextureViewDimension::D3,
             multisampled: false,
         },
         count: None,
@@ -302,6 +397,60 @@ fn write_curve_texture(
             width: data.len() as u32,
             height: 1,
             depth_or_array_layers: 1,
+        },
+    );
+
+    texture
+}
+
+fn create_identity_ocio_lut_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    label: &str,
+) -> wgpu::Texture {
+    let px = [[0.0f32, 0.0f32, 0.0f32, 1.0f32]];
+    write_ocio_lut_texture(device, queue, &px, 1, label)
+}
+
+fn write_ocio_lut_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    data: &[[f32; 4]],
+    size: u32,
+    label: &str,
+) -> wgpu::Texture {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some(label),
+        size: wgpu::Extent3d {
+            width: size,
+            height: size,
+            depth_or_array_layers: size,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D3,
+        format: wgpu::TextureFormat::Rgba32Float,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        view_formats: &[],
+    });
+
+    queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        bytemuck::cast_slice(data),
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(size * 16),
+            rows_per_image: Some(size),
+        },
+        wgpu::Extent3d {
+            width: size,
+            height: size,
+            depth_or_array_layers: size,
         },
     );
 
