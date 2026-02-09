@@ -41,11 +41,6 @@ void set_error(const char * err)
     g_last_error = err ? err : "unknown OCIO error";
 }
 
-void set_error(const std::string & err)
-{
-    g_last_error = err;
-}
-
 void clear_error()
 {
     g_last_error.clear();
