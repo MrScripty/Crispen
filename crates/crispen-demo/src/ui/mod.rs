@@ -8,6 +8,8 @@ pub mod components;
 pub mod dial;
 pub mod hue_curves;
 pub mod layout;
+#[cfg(feature = "ocio")]
+pub mod ocio_controls;
 pub mod primaries;
 pub mod systems;
 pub mod theme;
@@ -57,9 +59,18 @@ impl Plugin for CrispenUiPlugin {
                 vectorscope::sync_scope_dropdown_ui,
                 vectorscope::update_scope_texture,
                 systems::handle_load_image_shortcut,
+                #[cfg(feature = "ocio")]
+                ocio_controls::handle_ocio_dropdown_interactions,
+                #[cfg(feature = "ocio")]
+                ocio_controls::rebuild_ocio_dropdown_menus,
+                #[cfg(feature = "ocio")]
+                ocio_controls::sync_ocio_dropdown_ui,
             ),
         )
         .add_observer(systems::on_wheel_value_change);
+
+        #[cfg(feature = "ocio")]
+        app.init_resource::<ocio_controls::OcioDropdownUiState>();
     }
 }
 
