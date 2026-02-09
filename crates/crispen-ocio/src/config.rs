@@ -10,6 +10,13 @@ pub struct OcioConfig {
     pub(crate) ptr: NonNull<sys::OcioConfig>,
 }
 
+// SAFETY: This wrapper only exposes shared (`&self`) access to an immutable OCIO
+// config handle and all mutations happen through OCIO-created processor objects.
+// OCIO's config/processor APIs are designed for concurrent read access.
+unsafe impl Send for OcioConfig {}
+// SAFETY: See `Send` safety note above.
+unsafe impl Sync for OcioConfig {}
+
 impl OcioConfig {
     pub fn from_env() -> Result<Self, OcioError> {
         // SAFETY: FFI constructor returns owned opaque pointer or null on error.
