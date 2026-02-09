@@ -233,7 +233,7 @@ impl Readback {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("crispen_image_download_encoder"),
         });
-        encoder.copy_buffer_to_buffer(&handle.buffer, 0, &staging, 0, size);
+        encoder.copy_buffer_to_buffer(&handle.buffer, 0, staging, 0, size);
         queue.submit(std::iter::once(encoder.finish()));
 
         staging.slice(..).map_async(wgpu::MapMode::Read, |_| {});

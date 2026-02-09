@@ -137,6 +137,17 @@ impl GpuGradingPipeline {
         )
     }
 
+    /// Download the most recently graded output image, if available.
+    pub fn download_current_output(&mut self) -> Option<GradingImage> {
+        let handle = self.current_output.as_ref()?;
+        Some(Readback::download_image(
+            &self.device,
+            &self.queue,
+            handle,
+            &mut self.image_readback_staging,
+        ))
+    }
+
     /// Submit the full grading pipeline in a single GPU submission:
     /// bake LUT + apply LUT + format convert + scopes + staging copies.
     ///
@@ -345,9 +356,7 @@ impl GpuGradingPipeline {
 
     /// Compute scopes on the most recently graded output image, if available.
     pub fn compute_scopes_on_current_output(&mut self) -> Option<ScopeResults> {
-        if self.current_output.is_none() {
-            return None;
-        }
+        self.current_output.as_ref()?;
         Some(self.compute_scopes_on_output())
     }
 
