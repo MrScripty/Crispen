@@ -11,3 +11,9 @@ impl OfxHost {
         Self { _private: () }
     }
 }
+
+impl Default for OfxHost {
+    fn default() -> Self {
+        Self::new()
+    }
+}

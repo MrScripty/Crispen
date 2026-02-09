@@ -95,23 +95,12 @@ pub struct ScopeState {
 }
 
 /// Configuration for which scopes are active.
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct ScopeConfig {
     pub histogram_visible: bool,
     pub waveform_visible: bool,
     pub vectorscope_visible: bool,
     pub cie_visible: bool,
-}
-
-impl Default for ScopeConfig {
-    fn default() -> Self {
-        Self {
-            histogram_visible: false,
-            waveform_visible: false,
-            vectorscope_visible: false,
-            cie_visible: false,
-        }
-    }
 }
 
 impl ScopeConfig {

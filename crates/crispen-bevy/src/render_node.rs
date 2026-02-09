@@ -14,3 +14,9 @@ impl GradingRenderNode {
         Self { _private: () }
     }
 }
+
+impl Default for GradingRenderNode {
+    fn default() -> Self {
+        Self::new()
+    }
+}

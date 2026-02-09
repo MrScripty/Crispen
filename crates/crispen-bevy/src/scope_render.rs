@@ -13,3 +13,9 @@ impl ScopeRenderer {
         Self { _private: () }
     }
 }
+
+impl Default for ScopeRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
