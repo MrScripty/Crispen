@@ -122,12 +122,36 @@ impl ScopeDispatch {
 
         // Update cached uniform buffers via queue.write_buffer (no allocations).
         let pad = |v: u32| -> [u32; 4] { [v, 0, 0, 0] };
-        queue.write_buffer(&self.pixel_count_buf, 0, bytemuck::cast_slice(&pad(pixel_count)));
-        queue.write_buffer(&self.wf_width_buf, 0, bytemuck::cast_slice(&pad(image.width)));
-        queue.write_buffer(&self.wf_height_buf, 0, bytemuck::cast_slice(&pad(image.height)));
-        queue.write_buffer(&self.wf_waveform_height_buf, 0, bytemuck::cast_slice(&pad(waveform_height)));
-        queue.write_buffer(&self.vs_resolution_buf, 0, bytemuck::cast_slice(&pad(vectorscope_resolution)));
-        queue.write_buffer(&self.cie_resolution_buf, 0, bytemuck::cast_slice(&pad(cie_resolution)));
+        queue.write_buffer(
+            &self.pixel_count_buf,
+            0,
+            bytemuck::cast_slice(&pad(pixel_count)),
+        );
+        queue.write_buffer(
+            &self.wf_width_buf,
+            0,
+            bytemuck::cast_slice(&pad(image.width)),
+        );
+        queue.write_buffer(
+            &self.wf_height_buf,
+            0,
+            bytemuck::cast_slice(&pad(image.height)),
+        );
+        queue.write_buffer(
+            &self.wf_waveform_height_buf,
+            0,
+            bytemuck::cast_slice(&pad(waveform_height)),
+        );
+        queue.write_buffer(
+            &self.vs_resolution_buf,
+            0,
+            bytemuck::cast_slice(&pad(vectorscope_resolution)),
+        );
+        queue.write_buffer(
+            &self.cie_resolution_buf,
+            0,
+            bytemuck::cast_slice(&pad(cie_resolution)),
+        );
 
         // Clear all scope buffers.
         encoder.clear_buffer(&scope_buffers.histogram, 0, None);
@@ -350,4 +374,3 @@ fn create_scope_pipeline(
 
     (pipeline, bind_group_layout)
 }
-

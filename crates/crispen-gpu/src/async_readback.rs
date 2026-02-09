@@ -38,7 +38,13 @@ pub struct AsyncFrameResult {
 }
 
 impl ReadbackSlot {
-    fn new(device: &wgpu::Device, scope_config: &ScopeConfig, image_width: u32, image_staging_size: u64, slot_label: &str) -> Self {
+    fn new(
+        device: &wgpu::Device,
+        scope_config: &ScopeConfig,
+        image_width: u32,
+        image_staging_size: u64,
+        slot_label: &str,
+    ) -> Self {
         let image_staging = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some(&format!("crispen_image_staging_{slot_label}")),
             size: image_staging_size,
@@ -192,7 +198,11 @@ impl ReadbackSlot {
             let ch_stride = (image_width as usize) * (scope_config.waveform_height as usize);
             let channels: [Vec<u32>; 3] = std::array::from_fn(|ch| {
                 let start = ch * ch_stride;
-                flat[start..start + ch_stride].to_vec()
+                convert_waveform_channel(
+                    &flat[start..start + ch_stride],
+                    image_width as usize,
+                    scope_config.waveform_height as usize,
+                )
             });
             drop(data);
             self.waveform_staging.unmap();
@@ -275,11 +285,8 @@ impl AsyncReadback {
             return None;
         }
 
-        let result = self.slots[pending].consume(
-            viewer_byte_size,
-            &self.scope_config,
-            self.image_width,
-        );
+        let result =
+            self.slots[pending].consume(viewer_byte_size, &self.scope_config, self.image_width);
         self.pending_idx = None;
         Some(result)
     }
@@ -321,4 +328,23 @@ impl AsyncReadback {
     pub fn has_pending(&self) -> bool {
         self.pending_idx.is_some()
     }
+}
+
+/// Convert GPU waveform layout to row-major image layout.
+///
+/// GPU layout per channel is column-major by x:
+/// `src[x * height + bin]`, where `bin=0` is low intensity.
+/// Core `WaveformData` expects row-major:
+/// `dst[row * width + x]`, where `row=0` is top (high intensity).
+fn convert_waveform_channel(src: &[u32], width: usize, height: usize) -> Vec<u32> {
+    let mut dst = vec![0u32; width * height];
+    for x in 0..width {
+        for bin in 0..height {
+            let src_idx = x * height + bin;
+            let row = height - 1 - bin;
+            let dst_idx = row * width + x;
+            dst[dst_idx] = src[src_idx];
+        }
+    }
+    dst
 }

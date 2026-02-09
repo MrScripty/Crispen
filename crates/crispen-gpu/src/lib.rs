@@ -15,9 +15,9 @@ pub mod readback;
 pub mod scope_dispatch;
 pub mod vulkan_interop;
 
+pub use async_readback::AsyncFrameResult;
 pub use buffers::{GpuImageHandle, GpuLutHandle, ScopeBuffers, ScopeConfig};
 pub use format_converter::ViewerFormat;
-pub use async_readback::AsyncFrameResult;
 pub use pipeline::{FrameResult, GpuGradingPipeline, required_features};
 pub use readback::ScopeResults;
 

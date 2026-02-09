@@ -152,7 +152,11 @@ impl Readback {
                 (self.image_width as usize) * (self.scope_config.waveform_height as usize);
             let channels: [Vec<u32>; 3] = std::array::from_fn(|ch| {
                 let start = ch * ch_stride;
-                flat[start..start + ch_stride].to_vec()
+                convert_waveform_channel(
+                    &flat[start..start + ch_stride],
+                    self.image_width as usize,
+                    self.scope_config.waveform_height as usize,
+                )
             });
             drop(data);
             self.waveform_staging.unmap();
@@ -248,4 +252,23 @@ impl Readback {
             source_bit_depth: BitDepth::F32,
         }
     }
+}
+
+/// Convert GPU waveform layout to row-major image layout.
+///
+/// GPU layout per channel is column-major by x:
+/// `src[x * height + bin]`, where `bin=0` is low intensity.
+/// Core `WaveformData` expects row-major:
+/// `dst[row * width + x]`, where `row=0` is top (high intensity).
+fn convert_waveform_channel(src: &[u32], width: usize, height: usize) -> Vec<u32> {
+    let mut dst = vec![0u32; width * height];
+    for x in 0..width {
+        for bin in 0..height {
+            let src_idx = x * height + bin;
+            let row = height - 1 - bin;
+            let dst_idx = row * width + x;
+            dst[dst_idx] = src[src_idx];
+        }
+    }
+    dst
 }

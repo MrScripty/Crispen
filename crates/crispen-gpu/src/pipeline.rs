@@ -191,14 +191,8 @@ impl GpuGradingPipeline {
 
         // 2. Apply LUT to source image.
         let output = self.current_output.as_ref().unwrap();
-        self.lut_applicator.apply(
-            &self.device,
-            &self.queue,
-            source,
-            lut,
-            output,
-            &mut encoder,
-        );
+        self.lut_applicator
+            .apply(&self.device, &self.queue, source, lut, output, &mut encoder);
 
         // 3. Format conversion + staging copy for viewer image.
         let pixel_count = output.pixel_count();
@@ -211,25 +205,21 @@ impl GpuGradingPipeline {
             None => true,
         };
         if needs_new_staging {
-            self.image_readback_staging = Some(self.device.create_buffer(
-                &wgpu::BufferDescriptor {
+            self.image_readback_staging =
+                Some(self.device.create_buffer(&wgpu::BufferDescriptor {
                     label: Some("crispen_image_staging"),
                     size: viewer_byte_size,
                     usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
                     mapped_at_creation: false,
-                },
-            ));
+                }));
         }
 
         match viewer_format {
             ViewerFormat::F16 => {
                 let output = self.current_output.as_ref().unwrap();
-                let f16_buf = self.format_converter.convert(
-                    &self.device,
-                    &self.queue,
-                    output,
-                    &mut encoder,
-                );
+                let f16_buf =
+                    self.format_converter
+                        .convert(&self.device, &self.queue, output, &mut encoder);
                 let image_staging = self.image_readback_staging.as_ref().unwrap();
                 encoder.copy_buffer_to_buffer(f16_buf, 0, image_staging, 0, viewer_byte_size);
             }
@@ -461,14 +451,8 @@ impl GpuGradingPipeline {
 
         // 2. Apply LUT.
         let output = self.current_output.as_ref().unwrap();
-        self.lut_applicator.apply(
-            &self.device,
-            &self.queue,
-            source,
-            lut,
-            output,
-            &mut encoder,
-        );
+        self.lut_applicator
+            .apply(&self.device, &self.queue, source, lut, output, &mut encoder);
 
         // 3. Format conversion + 4. Scope dispatches.
         let output = self.current_output.as_ref().unwrap();
@@ -476,12 +460,9 @@ impl GpuGradingPipeline {
 
         match viewer_format {
             ViewerFormat::F16 => {
-                let f16_buf = self.format_converter.convert(
-                    &self.device,
-                    &self.queue,
-                    output,
-                    &mut encoder,
-                );
+                let f16_buf =
+                    self.format_converter
+                        .convert(&self.device, &self.queue, output, &mut encoder);
                 self.scope_dispatch.dispatch(
                     &self.device,
                     &self.queue,
@@ -493,12 +474,7 @@ impl GpuGradingPipeline {
                     &mut encoder,
                 );
                 let async_rb = self.async_readback.as_mut().unwrap();
-                async_rb.submit_readback(
-                    &mut encoder,
-                    f16_buf,
-                    viewer_byte_size,
-                    scope_buffers,
-                );
+                async_rb.submit_readback(&mut encoder, f16_buf, viewer_byte_size, scope_buffers);
             }
             ViewerFormat::F32 => {
                 self.scope_dispatch.dispatch(
