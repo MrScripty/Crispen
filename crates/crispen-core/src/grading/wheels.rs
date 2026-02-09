@@ -89,11 +89,11 @@ mod tests {
             &default_gain(),
             &default_offset(),
         );
-        for i in 0..3 {
+        for (i, channel) in result.iter().enumerate().take(3) {
             assert!(
-                (result[i] - rgb[i]).abs() < EPSILON,
+                (*channel - rgb[i]).abs() < EPSILON,
                 "channel {i}: {:.8} vs {:.8}",
-                result[i],
+                channel,
                 rgb[i]
             );
         }
@@ -110,11 +110,11 @@ mod tests {
             &gain,
             &default_offset(),
         );
-        for i in 0..3 {
+        for (i, channel) in result.iter().enumerate().take(3) {
             assert!(
-                (result[i] - rgb[i] * 2.0).abs() < EPSILON,
+                (*channel - rgb[i] * 2.0).abs() < EPSILON,
                 "channel {i}: {:.8} vs {:.8}",
-                result[i],
+                channel,
                 rgb[i] * 2.0
             );
         }
@@ -131,8 +131,8 @@ mod tests {
             &gain,
             &default_offset(),
         );
-        for i in 0..3 {
-            assert!((result[i] - rgb[i] * 2.0).abs() < EPSILON);
+        for (i, channel) in result.iter().enumerate().take(3) {
+            assert!((*channel - rgb[i] * 2.0).abs() < EPSILON);
         }
     }
 
@@ -147,8 +147,8 @@ mod tests {
             &default_gain(),
             &offset,
         );
-        for i in 0..3 {
-            assert!((result[i] - 0.6).abs() < EPSILON);
+        for channel in result.iter().take(3) {
+            assert!((*channel - 0.6).abs() < EPSILON);
         }
     }
 
@@ -162,8 +162,8 @@ mod tests {
         let gain = [0.5, 0.5, 0.5, 1.0];
         let result = apply_cdl(rgb, &lift, &default_gamma(), &gain, &default_offset());
         // At black with gain 0.5: x = 0*0.5 + 0.1*(1-0.5) = 0.05
-        for i in 0..3 {
-            assert!((result[i] - 0.05).abs() < EPSILON);
+        for channel in result.iter().take(3) {
+            assert!((*channel - 0.05).abs() < EPSILON);
         }
     }
 
@@ -178,8 +178,8 @@ mod tests {
             &default_gain(),
             &offset,
         );
-        for i in 0..3 {
-            assert!(result[i] >= 0.0, "output should never be negative");
+        for channel in result.iter().take(3) {
+            assert!(*channel >= 0.0, "output should never be negative");
         }
     }
 }

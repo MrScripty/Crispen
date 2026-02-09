@@ -136,7 +136,7 @@ impl TransferFunction for ArriLogC3Transfer {
 pub struct ArriLogC4Transfer;
 
 impl ArriLogC4Transfer {
-    const A: f32 = 2231.826_3;
+    const A: f32 = 2_231.826_3;
     const B: f32 = 64.0;
     const C: f32 = 0.074_107_56;
     const D: f32 = 0.092_864_12;
@@ -362,7 +362,7 @@ impl AcesCctTransfer {
     const CUT: f32 = 0.0078125;
     const CUT_ENCODED: f32 = 0.155_251_14;
     const SLOPE: f32 = 10.540_238;
-    const OFFSET: f32 = 0.072_905_534;
+    const OFFSET: f32 = 0.072_905_53;
 }
 
 impl TransferFunction for AcesCctTransfer {

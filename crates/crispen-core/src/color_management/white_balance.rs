@@ -148,8 +148,8 @@ mod tests {
     #[test]
     fn test_white_balance_preserves_black() {
         let result = apply_white_balance([0.0, 0.0, 0.0], 0.5, 0.5);
-        for i in 0..3 {
-            assert!(result[i].abs() < EPSILON);
+        for channel in result.iter().take(3) {
+            assert!(channel.abs() < EPSILON);
         }
     }
 }

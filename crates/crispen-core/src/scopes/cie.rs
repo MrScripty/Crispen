@@ -12,9 +12,9 @@ const DEFAULT_RESOLUTION: u32 = 256;
 
 /// sRGB (Rec. 709) to XYZ D65 matrix (row-major).
 const SRGB_TO_XYZ: [[f32; 3]; 3] = [
-    [0.4123908, 0.3575843, 0.1804808],
-    [0.2126390, 0.7151687, 0.0721923],
-    [0.0193308, 0.1191948, 0.9505322],
+    [0.412_390_8, 0.357_584_3, 0.180_480_8],
+    [0.212_639, 0.715_168_7, 0.072_192_3],
+    [0.019_330_8, 0.119_194_8, 0.950_532_2],
 ];
 
 /// CIE chromaticity diagram data — plots pixel colors on a CIE xy diagram.

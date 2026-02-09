@@ -55,8 +55,8 @@ mod tests {
         let params = GradingParams::default();
         let rgb = [0.5, 0.3, 0.7];
         let result = evaluate_transform(rgb, &params);
-        for i in 0..3 {
-            assert!(result[i].is_finite(), "channel {i} should be finite");
+        for (i, channel) in result.iter().enumerate().take(3) {
+            assert!(channel.is_finite(), "channel {i} should be finite");
         }
     }
 
@@ -73,11 +73,11 @@ mod tests {
         };
         let rgb = [0.5, 0.3, 0.7];
         let result = evaluate_transform(rgb, &params);
-        for i in 0..3 {
+        for (i, channel) in result.iter().enumerate().take(3) {
             assert!(
-                (result[i] - rgb[i]).abs() < EPSILON,
+                (*channel - rgb[i]).abs() < EPSILON,
                 "channel {i}: {:.8} vs {:.8}",
-                result[i],
+                channel,
                 rgb[i]
             );
         }
@@ -95,8 +95,8 @@ mod tests {
             ..GradingParams::default()
         };
         let result = evaluate_transform([0.0, 0.0, 0.0], &params);
-        for i in 0..3 {
-            assert!(result[i].abs() < EPSILON);
+        for channel in result.iter().take(3) {
+            assert!(channel.abs() < EPSILON);
         }
     }
 }

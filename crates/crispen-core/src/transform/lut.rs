@@ -194,10 +194,10 @@ impl Lut3D {
             }
 
             if let Some(rest) = trimmed.strip_prefix("LUT_3D_SIZE") {
-                if let Some(s) = rest.split_whitespace().next() {
-                    if let Ok(v) = s.parse::<u32>() {
-                        size = v;
-                    }
+                if let Some(s) = rest.split_whitespace().next()
+                    && let Ok(v) = s.parse::<u32>()
+                {
+                    size = v;
                 }
                 continue;
             }
@@ -341,8 +341,8 @@ mod tests {
         lut.bake(&params);
 
         let result = lut.apply([0.0, 0.0, 0.0]);
-        for i in 0..3 {
-            assert!(result[i].abs() < EPSILON);
+        for channel in result.iter().take(3) {
+            assert!(channel.abs() < EPSILON);
         }
     }
 

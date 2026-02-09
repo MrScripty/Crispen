@@ -272,6 +272,7 @@ fn bradford_adaptation(src_xy: [f64; 2], dst_xy: [f64; 2]) -> Mat3 {
 
 /// Internal gamut identifier — groups `ColorSpaceId`s that share the same primaries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(clippy::enum_variant_names)]
 enum Gamut {
     Rec709,
     Ap0,
@@ -439,12 +440,12 @@ mod tests {
             [0.2126390059, 0.7151686788, 0.0721923154],
             [0.0193308187, 0.1191947798, 0.9505321522],
         ];
-        for i in 0..3 {
-            for j in 0..3 {
+        for (i, row) in npm.iter().enumerate() {
+            for (j, value) in row.iter().enumerate() {
                 assert!(
-                    (npm[i][j] - published[i][j]).abs() < 1e-6,
+                    (*value - published[i][j]).abs() < 1e-6,
                     "NPM[{i}][{j}]: {:.10} vs {:.10}",
-                    npm[i][j],
+                    value,
                     published[i][j]
                 );
             }
@@ -455,10 +456,10 @@ mod tests {
     fn test_mat3_inverse_of_identity_is_identity() {
         let id = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
         let inv = mat3_inv(&id);
-        for i in 0..3 {
-            for j in 0..3 {
+        for (i, row) in inv.iter().enumerate() {
+            for (j, value) in row.iter().enumerate() {
                 let expected = if i == j { 1.0 } else { 0.0 };
-                assert!((inv[i][j] - expected).abs() < 1e-12);
+                assert!((*value - expected).abs() < 1e-12);
             }
         }
     }

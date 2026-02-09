@@ -147,11 +147,11 @@ mod tests {
         let pivot = 0.435;
         let rgb = [pivot, pivot, pivot];
         let result = apply_contrast(rgb, 2.0, pivot);
-        for i in 0..3 {
+        for (i, channel) in result.iter().enumerate().take(3) {
             assert!(
-                (result[i] - pivot).abs() < EPSILON,
+                (*channel - pivot).abs() < EPSILON,
                 "channel {i}: {:.8} vs {:.8}",
-                result[i],
+                channel,
                 pivot
             );
         }
@@ -170,8 +170,11 @@ mod tests {
         let pivot = 0.435;
         let result = apply_contrast(rgb, 2.0, pivot);
         // Values above pivot should move further above
-        for i in 0..3 {
-            assert!(result[i] > rgb[i], "contrast should push highlights higher");
+        for (result_channel, rgb_channel) in result.iter().zip(rgb.iter()).take(3) {
+            assert!(
+                result_channel > rgb_channel,
+                "contrast should push highlights higher"
+            );
         }
     }
 
@@ -195,8 +198,8 @@ mod tests {
     fn test_saturation_one_hue_zero_is_identity() {
         let rgb = [0.5, 0.3, 0.7];
         let result = apply_saturation_hue(rgb, 1.0, 0.0, 0.0);
-        for i in 0..3 {
-            assert!((result[i] - rgb[i]).abs() < EPSILON);
+        for (result_channel, rgb_channel) in result.iter().zip(rgb.iter()).take(3) {
+            assert!((result_channel - rgb_channel).abs() < EPSILON);
         }
     }
 
@@ -204,12 +207,13 @@ mod tests {
     fn test_hue_rotation_360_is_identity() {
         let rgb = [0.5, 0.3, 0.7];
         let result = apply_saturation_hue(rgb, 1.0, 360.0, 0.0);
-        for i in 0..3 {
+        for (i, (result_channel, rgb_channel)) in result.iter().zip(rgb.iter()).enumerate().take(3)
+        {
             assert!(
-                (result[i] - rgb[i]).abs() < EPSILON,
+                (result_channel - rgb_channel).abs() < EPSILON,
                 "360° hue rotation should be identity: ch{i} {:.6} vs {:.6}",
-                result[i],
-                rgb[i]
+                result_channel,
+                rgb_channel
             );
         }
     }
