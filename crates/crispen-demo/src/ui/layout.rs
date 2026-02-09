@@ -7,6 +7,7 @@ use bevy::prelude::*;
 use bevy::ui::UiTargetCamera;
 
 use super::UiCameraEntity;
+use super::vectorscope::VectorscopeImageHandle;
 use super::viewer::ViewerImageHandle;
 use super::{primaries, theme, viewer};
 
@@ -14,6 +15,7 @@ use super::{primaries, theme, viewer};
 pub fn spawn_root_layout(
     mut commands: Commands,
     viewer_handle: Res<ViewerImageHandle>,
+    vectorscope_handle: Res<VectorscopeImageHandle>,
     ui_camera: Res<UiCameraEntity>,
 ) {
     commands
@@ -30,6 +32,6 @@ pub fn spawn_root_layout(
         ))
         .with_children(|root| {
             viewer::spawn_viewer_panel(root, viewer_handle.handle.clone());
-            primaries::spawn_primaries_panel(root);
+            primaries::spawn_primaries_panel(root, vectorscope_handle.handle.clone());
         });
 }

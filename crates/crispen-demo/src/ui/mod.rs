@@ -6,10 +6,12 @@
 pub mod color_wheel;
 pub mod components;
 pub mod dial;
+pub mod hue_curves;
 pub mod layout;
 pub mod primaries;
 pub mod systems;
 pub mod theme;
+pub mod vectorscope;
 pub mod viewer;
 
 use bevy::prelude::*;
@@ -24,31 +26,40 @@ pub struct CrispenUiPlugin;
 
 impl Plugin for CrispenUiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((color_wheel::ColorWheelPlugin, dial::DialPlugin))
-            .add_systems(
-                Startup,
+        app.add_plugins((
+            color_wheel::ColorWheelPlugin,
+            dial::DialPlugin,
+            hue_curves::HueCurvesPlugin,
+        ))
+        .init_resource::<vectorscope::ScopeViewState>()
+        .add_systems(
+            Startup,
+            (
+                setup_ui_camera,
+                viewer::setup_viewer,
+                vectorscope::setup_vectorscope,
+                layout::spawn_root_layout,
+            )
+                .chain(),
+        )
+        .add_systems(
+            Update,
+            (
                 (
-                    setup_ui_camera,
-                    viewer::setup_viewer,
-                    layout::spawn_root_layout,
+                    systems::sync_dials_to_params,
+                    systems::sync_params_to_dials,
+                    systems::sync_params_to_wheels,
                 )
                     .chain(),
-            )
-            .add_systems(
-                Update,
-                (
-                    (
-                        systems::sync_dials_to_params,
-                        systems::sync_params_to_dials,
-                        systems::sync_params_to_wheels,
-                    )
-                        .chain(),
-                    dial::update_dial_visuals,
-                    viewer::update_viewer_texture,
-                    systems::handle_load_image_shortcut,
-                ),
-            )
-            .add_observer(systems::on_wheel_value_change);
+                dial::update_dial_visuals,
+                viewer::update_viewer_texture,
+                vectorscope::handle_scope_dropdown_interactions,
+                vectorscope::sync_scope_dropdown_ui,
+                vectorscope::update_scope_texture,
+                systems::handle_load_image_shortcut,
+            ),
+        )
+        .add_observer(systems::on_wheel_value_change);
     }
 }
 

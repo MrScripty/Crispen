@@ -1,6 +1,6 @@
-//! Primaries panel (Lift / Gamma / Gain / Offset wheels + dial knobs).
+//! Bottom control panel split into Primaries, Hue-vs-Curves, and Scopes sections.
 //!
-//! Layout matches DaVinci Resolve's Primaries panel:
+//! Primaries section layout matches DaVinci Resolve's Primaries panel:
 //! ```text
 //! ┌──────────────────────────────────────────────────────────────────┐
 //! │  Temp  │  Tint  │  Contrast │  Pivot  │  Mid Detail            │
@@ -17,18 +17,22 @@ use bevy::prelude::*;
 use super::color_wheel::{WheelType, color_wheel};
 use super::components::{ParamId, param_default, param_label, param_range, param_step};
 use super::dial::{DialLabelPosition, spawn_param_dial};
+use super::hue_curves;
 use super::theme;
+use super::vectorscope;
 
 /// Spawn the primaries panel as a child of the given parent.
-pub fn spawn_primaries_panel(parent: &mut ChildSpawnerCommands) {
+pub fn spawn_primaries_panel(parent: &mut ChildSpawnerCommands, vectorscope_handle: Handle<Image>) {
     parent
         .spawn((
             Node {
                 display: Display::Flex,
-                flex_direction: FlexDirection::Column,
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::FlexStart,
+                align_items: AlignItems::Stretch,
+                column_gap: Val::Px(theme::BOTTOM_SECTION_GAP),
                 height: Val::Px(theme::PRIMARIES_PANEL_HEIGHT),
                 padding: UiRect::all(Val::Px(theme::PANEL_PADDING)),
-                row_gap: Val::Px(6.0),
                 width: Val::Percent(100.0),
                 border: UiRect::top(Val::Px(1.0)),
                 ..default()
@@ -37,17 +41,50 @@ pub fn spawn_primaries_panel(parent: &mut ChildSpawnerCommands) {
             BorderColor::all(theme::BORDER_SUBTLE),
         ))
         .with_children(|panel| {
-            panel.spawn((
-                Text::new("Primaries"),
-                TextFont {
-                    font_size: 14.0,
+            panel
+                .spawn(Node {
+                    display: Display::Flex,
+                    flex_direction: FlexDirection::Column,
+                    row_gap: Val::Px(6.0),
+                    width: Val::Px(theme::PRIMARIES_SECTION_WIDTH),
+                    flex_shrink: 0.0,
                     ..default()
-                },
-                TextColor(theme::TEXT_PRIMARY),
-            ));
-            spawn_top_dials(panel);
-            spawn_wheels_row(panel);
-            spawn_bottom_dials(panel);
+                })
+                .with_children(|primaries| {
+                    primaries.spawn((
+                        Text::new("Primaries"),
+                        TextFont {
+                            font_size: 14.0,
+                            ..default()
+                        },
+                        TextColor(theme::TEXT_PRIMARY),
+                    ));
+                    spawn_top_dials(primaries);
+                    spawn_wheels_row(primaries);
+                    spawn_bottom_dials(primaries);
+                });
+
+            hue_curves::spawn_hue_curves_section(panel);
+
+            panel
+                .spawn((
+                    Node {
+                        display: Display::Flex,
+                        flex_direction: FlexDirection::Column,
+                        align_items: AlignItems::Stretch,
+                        row_gap: Val::Px(6.0),
+                        flex_grow: 1.0,
+                        min_width: Val::Px(theme::SCOPES_SECTION_MIN_WIDTH),
+                        padding: UiRect::left(Val::Px(12.0)),
+                        border: UiRect::left(Val::Px(1.0)),
+                        ..default()
+                    },
+                    BorderColor::all(theme::BORDER_SUBTLE),
+                ))
+                .with_children(|scopes| {
+                    vectorscope::spawn_scope_header(scopes);
+                    vectorscope::spawn_vectorscope_panel(scopes, vectorscope_handle.clone());
+                });
         });
 }
 

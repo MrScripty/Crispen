@@ -54,8 +54,23 @@ pub const DIAL_SLOT_WIDTH: f32 = 78.0;
 /// Width (px) of the 4-wheel cluster.
 pub const WHEEL_GROUP_WIDTH: f32 = WHEEL_SIZE * 4.0 + WHEEL_GAP * 3.0;
 
+/// Width (px) of the vectorscope panel shown beside primary wheels.
+pub const VECTORSCOPE_PANEL_WIDTH: f32 = 172.0;
+
 /// Width (px) of top/bottom dial rows, centered around wheel edge anchors.
 pub const WHEEL_DIAL_ROW_WIDTH: f32 = WHEEL_GROUP_WIDTH + DIAL_SLOT_WIDTH;
+
+/// Width (px) of the primaries section content block.
+pub const PRIMARIES_SECTION_WIDTH: f32 = WHEEL_DIAL_ROW_WIDTH;
+
+/// Width (px) of the hue-vs-curves section content block.
+pub const HUE_CURVES_SECTION_WIDTH: f32 = 316.0;
+
+/// Minimum width (px) of the scopes section content block.
+pub const SCOPES_SECTION_MIN_WIDTH: f32 = VECTORSCOPE_PANEL_WIDTH + 16.0;
+
+/// Horizontal gap (px) between bottom panel sections.
+pub const BOTTOM_SECTION_GAP: f32 = 16.0;
 
 /// Additional top margin (px) applied to the top dial row.
 pub const TOP_DIAL_ROW_MARGIN_TOP: f32 = 6.0;
@@ -68,6 +83,15 @@ pub const PANEL_PADDING: f32 = 8.0;
 
 /// Bottom panel height (px), similar to Resolve primaries module.
 pub const PRIMARIES_PANEL_HEIGHT: f32 = 340.0;
+
+/// Background color for the hue-vs-curves plot area.
+pub const CURVE_PLOT_BG: Color = Color::srgb(0.14, 0.14, 0.14);
+
+/// Grid line color in the hue-vs-curves plot.
+pub const CURVE_GRID_LINE: Color = Color::srgb(0.23, 0.23, 0.23);
+
+/// Center neutral line color in the hue-vs-curves plot.
+pub const CURVE_NEUTRAL_LINE: Color = Color::srgb(0.32, 0.32, 0.32);
 
 // ── Typography ──────────────────────────────────────────────────────────────
 
