@@ -8,6 +8,14 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_PREBUILT_DIR");
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_SOURCE_DIR");
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_INSTALL_EXT_PACKAGES");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_CMAKE_PREFIX_PATH");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_MINIZIP_NG_ROOT");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_MINIZIP_NG_DIR");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_MINIZIP_NG_LIBRARY");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_MINIZIP_NG_INCLUDE_DIR");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_ZLIB_ROOT");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_ZLIB_LIBRARY");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_ZLIB_INCLUDE_DIR");
 
     if let Some(prebuilt_dir) = env_path("CRISPEN_OCIO_PREBUILT_DIR") {
         let include_dir = prebuilt_dir.join("include");
@@ -38,7 +46,8 @@ fn main() {
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "MISSING".to_string());
 
-    let ocio_dst = cmake::Config::new(&ocio_src)
+    let mut cmake_cfg = cmake::Config::new(&ocio_src);
+    cmake_cfg
         .define("BUILD_SHARED_LIBS", "ON")
         .define("OCIO_BUILD_APPS", "OFF")
         .define("OCIO_BUILD_TESTS", "OFF")
@@ -47,8 +56,10 @@ fn main() {
         .define("OCIO_BUILD_JAVA", "OFF")
         .define("OCIO_BUILD_DOCS", "OFF")
         .define("OCIO_INSTALL_EXT_PACKAGES", &install_ext)
-        .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON")
-        .build();
+        .define("CMAKE_POSITION_INDEPENDENT_CODE", "ON");
+    apply_dependency_hints(&mut cmake_cfg);
+
+    let ocio_dst = cmake_cfg.build();
 
     compile_wrapper(&ocio_dst.join("include"));
     link_ocio(&pick_lib_dir(&ocio_dst));
@@ -80,6 +91,39 @@ fn env_path(var: &str) -> Option<PathBuf> {
         .ok()
         .filter(|v| !v.is_empty())
         .map(PathBuf::from)
+}
+
+fn env_string(var: &str) -> Option<String> {
+    env::var(var).ok().filter(|v| !v.is_empty())
+}
+
+fn apply_dependency_hints(cfg: &mut cmake::Config) {
+    if let Some(prefix_path) = env_string("CRISPEN_OCIO_CMAKE_PREFIX_PATH") {
+        cfg.define("CMAKE_PREFIX_PATH", prefix_path);
+    }
+
+    if let Some(path) = env_path("CRISPEN_OCIO_MINIZIP_NG_ROOT") {
+        cfg.define("minizip-ng_ROOT", path);
+    }
+    if let Some(path) = env_path("CRISPEN_OCIO_MINIZIP_NG_DIR") {
+        cfg.define("minizip-ng_DIR", path);
+    }
+    if let Some(path) = env_path("CRISPEN_OCIO_MINIZIP_NG_LIBRARY") {
+        cfg.define("minizip-ng_LIBRARY", path);
+    }
+    if let Some(path) = env_path("CRISPEN_OCIO_MINIZIP_NG_INCLUDE_DIR") {
+        cfg.define("minizip-ng_INCLUDE_DIR", path);
+    }
+
+    if let Some(path) = env_path("CRISPEN_OCIO_ZLIB_ROOT") {
+        cfg.define("ZLIB_ROOT", path);
+    }
+    if let Some(path) = env_path("CRISPEN_OCIO_ZLIB_LIBRARY") {
+        cfg.define("ZLIB_LIBRARY", path);
+    }
+    if let Some(path) = env_path("CRISPEN_OCIO_ZLIB_INCLUDE_DIR") {
+        cfg.define("ZLIB_INCLUDE_DIR", path);
+    }
 }
 
 fn pick_lib_dir(root: &Path) -> PathBuf {
