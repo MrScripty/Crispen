@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint (OCIO native build skipped)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run strict clippy
+        run: make ci-lint
+
+  build-ocio-prebuilt:
+    name: Build with prebuilt OCIO
+    if: ${{ vars.CRISPEN_OCIO_PREBUILT_DIR != '' }}
+    runs-on: ubuntu-latest
+    env:
+      PREBUILT_OCIO_DIR: ${{ vars.CRISPEN_OCIO_PREBUILT_DIR }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build OCIO-enabled demo with prebuilt install
+        run: make ci-build-ocio PREBUILT_OCIO_DIR="$PREBUILT_OCIO_DIR"
