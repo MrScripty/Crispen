@@ -14,6 +14,8 @@ use crispen_gpu::ScopeResults;
 use crate::events::{
     ColorGradingCommand, ImageLoadedEvent, ParamsUpdatedEvent, ScopeDataReadyEvent,
 };
+#[cfg(feature = "ocio")]
+use crate::resources::OcioColorManagement;
 use crate::resources::{
     GpuPipelineState, GradingState, ImageState, PipelinePerfStats, ScopeConfig, ScopeState,
     ViewerData,
@@ -121,6 +123,57 @@ pub fn detect_param_changes(state: Res<GradingState>) {
     }
 }
 
+/// Re-bake OCIO IDT/ODT LUTs when OCIO display/input selection changes.
+#[cfg(feature = "ocio")]
+pub fn bake_ocio_luts(mut ocio: ResMut<OcioColorManagement>, mut grading: ResMut<GradingState>) {
+    if !ocio.dirty {
+        return;
+    }
+
+    let mut idt_lut = None;
+    let mut odt_lut = None;
+
+    match ocio
+        .config
+        .processor(&ocio.input_space, &ocio.working_space)
+        .and_then(|p| p.cpu_f32())
+    {
+        Ok(cpu) => {
+            idt_lut = Some(cpu.bake_3d_lut(65));
+        }
+        Err(err) => {
+            tracing::warn!(
+                "OCIO IDT bake failed for '{}' -> '{}': {err}",
+                ocio.input_space,
+                ocio.working_space
+            );
+        }
+    }
+
+    match ocio
+        .config
+        .display_view_processor(&ocio.working_space, &ocio.display, &ocio.view)
+        .and_then(|p| p.cpu_f32())
+    {
+        Ok(cpu) => {
+            odt_lut = Some(cpu.bake_3d_lut(65));
+        }
+        Err(err) => {
+            tracing::warn!(
+                "OCIO ODT bake failed for '{}' -> {}/{}: {err}",
+                ocio.working_space,
+                ocio.display,
+                ocio.view
+            );
+        }
+    }
+
+    ocio.idt_lut = idt_lut;
+    ocio.odt_lut = odt_lut;
+    ocio.dirty = false;
+    grading.dirty = true;
+}
+
 /// Submit GPU work (bake + apply + scopes) when params are dirty. Non-blocking.
 ///
 /// The actual results are consumed by [`consume_gpu_results`] on a subsequent frame.
@@ -128,6 +181,7 @@ pub fn submit_gpu_work(
     mut state: ResMut<GradingState>,
     mut perf: ResMut<PipelinePerfStats>,
     gpu: Option<ResMut<GpuPipelineState>>,
+    #[cfg(feature = "ocio")] ocio: Option<Res<OcioColorManagement>>,
 ) {
     if !state.dirty {
         return;
@@ -144,6 +198,16 @@ pub fn submit_gpu_work(
         state.dirty = false;
         return;
     };
+
+    #[cfg(feature = "ocio")]
+    {
+        if let Some(ocio) = ocio.as_ref() {
+            gpu.pipeline
+                .set_ocio_luts(ocio.idt_lut.as_deref(), ocio.odt_lut.as_deref(), 65);
+        } else {
+            gpu.pipeline.set_ocio_luts(None, None, 65);
+        }
+    }
 
     // Don't submit if the previous readback hasn't been consumed yet.
     // Keep dirty=true so we retry next frame after consume frees the slot.

@@ -8,6 +8,8 @@ use crispen_core::transform::params::GradingParams;
 use crispen_gpu::GpuImageHandle;
 use crispen_gpu::ViewerFormat;
 use crispen_gpu::pipeline::GpuGradingPipeline;
+#[cfg(feature = "ocio")]
+use crispen_ocio::OcioConfig;
 use std::time::{Duration, Instant};
 
 /// Bevy resource holding the current grading parameters.
@@ -32,6 +34,21 @@ impl Default for GradingState {
             lut: None,
         }
     }
+}
+
+/// Optional OCIO-based color management. When present, it overrides the native
+/// input/output color transforms in the LUT bake shader.
+#[cfg(feature = "ocio")]
+#[derive(Resource)]
+pub struct OcioColorManagement {
+    pub config: OcioConfig,
+    pub input_space: String,
+    pub working_space: String,
+    pub display: String,
+    pub view: String,
+    pub idt_lut: Option<Vec<[f32; 4]>>,
+    pub odt_lut: Option<Vec<[f32; 4]>>,
+    pub dirty: bool,
 }
 
 /// Bevy resource holding the source image.

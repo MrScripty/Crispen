@@ -14,6 +14,8 @@ use crate::config::AppConfig;
 use crate::image_loader;
 use crate::ipc::{BevyToUi, UiToBevy};
 use crispen_bevy::events::{ColorGradingCommand, ImageLoadedEvent};
+#[cfg(feature = "ocio")]
+use crispen_bevy::resources::OcioColorManagement;
 use crispen_bevy::resources::{GpuPipelineState, GradingState, ImageState};
 
 /// Resource holding outbound messages to send to the UI.
@@ -161,6 +163,7 @@ pub fn poll_inbound_messages(
     mut commands: MessageWriter<ColorGradingCommand>,
     mut images: ResMut<ImageState>,
     mut gpu: Option<ResMut<GpuPipelineState>>,
+    #[cfg(feature = "ocio")] mut ocio: Option<ResMut<OcioColorManagement>>,
     mut state: ResMut<GradingState>,
     mut outbound: ResMut<OutboundUiMessages>,
     mut image_loaded: MessageWriter<ImageLoadedEvent>,
@@ -174,6 +177,8 @@ pub fn poll_inbound_messages(
                 &mut commands,
                 &mut images,
                 gpu.as_deref_mut(),
+                #[cfg(feature = "ocio")]
+                ocio.as_deref_mut(),
                 &mut state,
                 &mut outbound,
                 &mut image_loaded,
@@ -193,6 +198,7 @@ fn dispatch_ui_message(
     commands: &mut MessageWriter<ColorGradingCommand>,
     images: &mut ResMut<ImageState>,
     gpu: Option<&mut GpuPipelineState>,
+    #[cfg(feature = "ocio")] ocio_state: Option<&mut OcioColorManagement>,
     state: &mut ResMut<GradingState>,
     outbound: &mut ResMut<OutboundUiMessages>,
     image_loaded: &mut MessageWriter<ImageLoadedEvent>,
@@ -213,6 +219,8 @@ fn dispatch_ui_message(
                 preview_size,
                 images,
                 gpu,
+                #[cfg(feature = "ocio")]
+                ocio_state,
                 state,
                 outbound,
                 image_loaded,
@@ -242,6 +250,7 @@ fn handle_load_image(
     preview_size: Option<(u32, u32)>,
     images: &mut ResMut<ImageState>,
     gpu: Option<&mut GpuPipelineState>,
+    #[cfg(feature = "ocio")] ocio_state: Option<&mut OcioColorManagement>,
     state: &mut ResMut<GradingState>,
     outbound: &mut ResMut<OutboundUiMessages>,
     image_loaded: &mut MessageWriter<ImageLoadedEvent>,
@@ -260,6 +269,14 @@ fn handle_load_image(
 
             images.source = Some(img);
             state.dirty = true;
+
+            #[cfg(feature = "ocio")]
+            if let Some(ocio) = ocio_state {
+                let detected_space = state.params.color_management.input_space;
+                ocio.input_space =
+                    crate::ocio_support::map_detected_to_ocio_name(detected_space, &ocio.config);
+                ocio.dirty = true;
+            }
 
             image_loaded.write(ImageLoadedEvent {
                 width,

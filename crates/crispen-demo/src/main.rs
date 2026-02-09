@@ -7,6 +7,7 @@ mod config;
 mod embedded_ui;
 mod image_loader;
 mod ipc;
+mod ocio_support;
 mod render;
 mod ui;
 mod ws_bridge;
@@ -18,7 +19,11 @@ use bevy::window::WindowResolution;
 use config::AppConfig;
 use crispen_bevy::CrispenPlugin;
 use crispen_bevy::events::{ParamsUpdatedEvent, ScopeDataReadyEvent};
+#[cfg(feature = "ocio")]
+use crispen_bevy::resources::OcioColorManagement;
 use crispen_bevy::resources::{GradingState, ScopeState};
+#[cfg(feature = "ocio")]
+use crispen_ocio::OcioConfig;
 use ws_bridge::{OutboundUiMessages, WsBridge};
 
 fn main() {
@@ -35,8 +40,8 @@ fn main() {
         ..default()
     };
 
-    App::new()
-        .insert_resource(config)
+    let mut app = App::new();
+    app.insert_resource(config)
         .insert_resource(OutboundUiMessages::default())
         .insert_resource(WsBridge {
             outbound_tx,
@@ -66,8 +71,61 @@ fn main() {
                 forward_params_to_ui,
                 forward_scopes_to_ui,
             ),
-        )
-        .run();
+        );
+
+    #[cfg(feature = "ocio")]
+    try_insert_ocio_resource(&mut app);
+
+    app.run();
+}
+
+#[cfg(feature = "ocio")]
+fn try_insert_ocio_resource(app: &mut App) {
+    let ocio_config = OcioConfig::from_env()
+        .or_else(|_| OcioConfig::builtin("studio-config-v2.2.0_aces-v1.3_ocio-v2.4"));
+
+    let Ok(config) = ocio_config else {
+        tracing::warn!("OCIO config unavailable; using native color management");
+        return;
+    };
+
+    let default_display = config.default_display();
+    let display = if default_display.is_empty() {
+        config
+            .displays()
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "sRGB - Display".to_string())
+    } else {
+        default_display
+    };
+
+    let default_view = config.default_view(&display);
+    let view = if default_view.is_empty() {
+        config
+            .views(&display)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| "ACES 1.0 - SDR Video".to_string())
+    } else {
+        default_view
+    };
+
+    let working_space = config
+        .role("scene_linear")
+        .unwrap_or_else(|| "ACEScg".to_string());
+
+    app.insert_resource(OcioColorManagement {
+        config,
+        input_space: "sRGB - Texture".to_string(),
+        working_space,
+        display,
+        view,
+        idt_lut: None,
+        odt_lut: None,
+        dirty: true,
+    });
+    tracing::info!("OCIO enabled");
 }
 
 /// Send initial state to the UI when the app starts.

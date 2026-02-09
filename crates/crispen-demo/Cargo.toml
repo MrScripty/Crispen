@@ -4,9 +4,14 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = []
+ocio = ["crispen-bevy/ocio", "dep:crispen-ocio"]
+
 [dependencies]
 crispen-core = { path = "../crispen-core" }
 crispen-bevy = { path = "../crispen-bevy" }
+crispen-ocio = { path = "../crispen-ocio", optional = true }
 bevy = { workspace = true, features = [
     "bevy_core_pipeline",
     "bevy_render",

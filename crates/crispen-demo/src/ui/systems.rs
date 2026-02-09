@@ -12,6 +12,8 @@ use bevy::ui_widgets::ValueChange;
 use bevy::window::PrimaryWindow;
 
 use crispen_bevy::events::ImageLoadedEvent;
+#[cfg(feature = "ocio")]
+use crispen_bevy::resources::OcioColorManagement;
 use crispen_bevy::resources::{GpuPipelineState, GradingState, ImageState};
 
 use super::color_wheel::{ColorWheelMaterial, WheelType};
@@ -166,6 +168,7 @@ pub fn handle_load_image_shortcut(
     mut image_state: ResMut<ImageState>,
     mut grading_state: ResMut<GradingState>,
     gpu: Option<ResMut<GpuPipelineState>>,
+    #[cfg(feature = "ocio")] mut ocio: Option<ResMut<OcioColorManagement>>,
     mut image_loaded: MessageWriter<ImageLoadedEvent>,
 ) {
     let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
@@ -188,6 +191,8 @@ pub fn handle_load_image_shortcut(
         &mut image_state,
         &mut grading_state,
         gpu,
+        #[cfg(feature = "ocio")]
+        ocio.as_deref_mut(),
         &mut image_loaded,
     );
 }
@@ -199,6 +204,7 @@ fn load_image_from_path(
     image_state: &mut ResMut<ImageState>,
     grading_state: &mut ResMut<GradingState>,
     gpu: Option<ResMut<GpuPipelineState>>,
+    #[cfg(feature = "ocio")] ocio_state: Option<&mut OcioColorManagement>,
     image_loaded: &mut MessageWriter<ImageLoadedEvent>,
 ) {
     let image = match image_loader::load_image_for_display(path, preview_size) {
@@ -229,6 +235,14 @@ fn load_image_from_path(
 
     image_state.source = Some(image);
     grading_state.dirty = true;
+
+    #[cfg(feature = "ocio")]
+    if let Some(ocio) = ocio_state {
+        let detected_space = grading_state.params.color_management.input_space;
+        ocio.input_space =
+            crate::ocio_support::map_detected_to_ocio_name(detected_space, &ocio.config);
+        ocio.dirty = true;
+    }
 
     image_loaded.write(ImageLoadedEvent {
         width,

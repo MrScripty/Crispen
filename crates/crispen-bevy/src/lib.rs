@@ -20,6 +20,8 @@ use resources::{
     GpuPipelineState, GradingState, ImageState, PipelinePerfStats, ScopeConfig, ScopeState,
     ViewerData,
 };
+#[cfg(feature = "ocio")]
+use systems::bake_ocio_luts;
 use systems::{
     consume_gpu_results, detect_param_changes, handle_grading_commands, submit_gpu_work,
 };
@@ -55,6 +57,14 @@ impl Plugin for CrispenPlugin {
                     detect_param_changes,
                 ),
             );
+
+        #[cfg(feature = "ocio")]
+        app.add_systems(
+            Update,
+            bake_ocio_luts
+                .after(handle_grading_commands)
+                .before(submit_gpu_work),
+        );
     }
 }
 
