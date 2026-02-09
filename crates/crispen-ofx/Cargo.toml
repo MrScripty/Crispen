@@ -6,7 +6,9 @@ license.workspace = true
 
 [dependencies]
 crispen-core = { path = "../crispen-core" }
+libloading = "0.8"
 openfx-sys = { workspace = true, optional = true }
+thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [lints]
