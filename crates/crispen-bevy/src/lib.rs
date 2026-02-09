@@ -11,6 +11,7 @@ pub mod systems;
 
 use bevy::prelude::*;
 use crispen_gpu::GpuGradingPipeline;
+use crispen_gpu::vulkan_interop::VulkanInterop;
 
 // Re-export for downstream crates.
 pub use crispen_gpu::ViewerFormat;
@@ -18,7 +19,7 @@ pub use crispen_gpu::ViewerFormat;
 use events::{ColorGradingCommand, ImageLoadedEvent, ParamsUpdatedEvent, ScopeDataReadyEvent};
 use resources::{
     GpuPipelineState, GradingState, ImageState, PipelinePerfStats, ScopeConfig, ScopeState,
-    ViewerData,
+    ViewerData, VulkanInteropState,
 };
 #[cfg(feature = "ocio")]
 use systems::bake_ocio_luts;
@@ -72,11 +73,28 @@ impl Plugin for CrispenPlugin {
 fn init_gpu_pipeline(mut commands: Commands) {
     match GpuGradingPipeline::create_blocking() {
         Ok(pipeline) => {
-            tracing::info!("GPU grading pipeline initialized");
+            let interop_caps = VulkanInterop::probe(
+                pipeline.adapter_backend(),
+                pipeline.device(),
+                pipeline.enabled_features(),
+            );
+            let zero_copy_available = interop_caps.supports_d3d11_win32_import;
+
+            tracing::info!(
+                backend = ?interop_caps.backend,
+                has_vulkan_hal_access = interop_caps.has_vulkan_hal_access,
+                zero_copy_import_available = zero_copy_available,
+                "Vulkan interop capabilities probed"
+            );
+
+            commands.insert_resource(VulkanInteropState {
+                capabilities: interop_caps,
+            });
             commands.insert_resource(GpuPipelineState {
                 pipeline,
                 source_handle: None,
             });
+            tracing::info!("GPU grading pipeline initialized");
         }
         Err(e) => {
             tracing::error!("Failed to initialize GPU grading pipeline: {e}");

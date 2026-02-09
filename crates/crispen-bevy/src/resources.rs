@@ -8,6 +8,7 @@ use crispen_core::transform::params::GradingParams;
 use crispen_gpu::GpuImageHandle;
 use crispen_gpu::ViewerFormat;
 use crispen_gpu::pipeline::GpuGradingPipeline;
+use crispen_gpu::vulkan_interop::VulkanInteropCapabilities;
 #[cfg(feature = "ocio")]
 use crispen_ocio::OcioConfig;
 use std::time::{Duration, Instant};
@@ -123,6 +124,12 @@ pub struct GpuPipelineState {
     pub pipeline: GpuGradingPipeline,
     /// Handle to the source image uploaded to the GPU (None until first load).
     pub source_handle: Option<GpuImageHandle>,
+}
+
+/// Snapshot of Vulkan external-memory interop support on the current GPU backend.
+#[derive(Resource)]
+pub struct VulkanInteropState {
+    pub capabilities: VulkanInteropCapabilities,
 }
 
 /// Runtime timings for the grading pipeline.
