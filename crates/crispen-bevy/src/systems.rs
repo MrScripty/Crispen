@@ -125,7 +125,11 @@ pub fn detect_param_changes(state: Res<GradingState>) {
 
 /// Re-bake OCIO IDT/ODT LUTs when OCIO display/input selection changes.
 #[cfg(feature = "ocio")]
-pub fn bake_ocio_luts(mut ocio: ResMut<OcioColorManagement>, mut grading: ResMut<GradingState>) {
+pub fn bake_ocio_luts(
+    ocio: Option<ResMut<OcioColorManagement>>,
+    mut grading: ResMut<GradingState>,
+) {
+    let Some(mut ocio) = ocio else { return };
     if !ocio.dirty {
         return;
     }
