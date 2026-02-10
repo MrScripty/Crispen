@@ -18,6 +18,7 @@ fn main() {
         return;
     }
 
+    // Mode 1: Explicit prebuilt directory.
     if let Some(prebuilt_dir) = env_path("CRISPEN_OIIO_PREBUILT_DIR") {
         let include_dir = prebuilt_dir.join("include");
         let lib_dir = pick_lib_dir(&prebuilt_dir);
@@ -27,18 +28,31 @@ fn main() {
                 prebuilt_dir.display()
             );
         }
-        compile_wrapper(&include_dir);
+        compile_wrapper(&[include_dir]);
         link_oiio(&lib_dir);
         return;
     }
 
+    // Mode 2: System packages via pkg-config.
+    if let Ok(lib) = pkg_config::Config::new()
+        .atleast_version("2.0")
+        .probe("OpenImageIO")
+    {
+        // pkg-config emits cargo:rustc-link-lib and cargo:rustc-link-search.
+        compile_wrapper(&lib.include_paths);
+        link_stdcpp();
+        return;
+    }
+
+    // Mode 3: Build from source via CMake.
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("manifest dir"));
     let oiio_src = env_path("CRISPEN_OIIO_SOURCE_DIR")
         .unwrap_or_else(|| manifest_dir.join("../../extern/OpenImageIO"));
     if !oiio_src.exists() {
         panic!(
-            "OpenImageIO source not found at {}. \
-             Set CRISPEN_OIIO_SOURCE_DIR or CRISPEN_OIIO_PREBUILT_DIR.",
+            "OpenImageIO not found.\n\
+             Install system packages:  sudo apt install libopenimageio-dev\n\
+             Or set CRISPEN_OIIO_PREBUILT_DIR, or provide source at {}.",
             oiio_src.display()
         );
     }
@@ -59,24 +73,30 @@ fn main() {
 
     let oiio_dst = cmake_cfg.build();
 
-    compile_wrapper(&oiio_dst.join("include"));
+    compile_wrapper(&[oiio_dst.join("include")]);
     link_oiio(&pick_lib_dir(&oiio_dst));
 }
 
-fn compile_wrapper(oiio_include: &Path) {
-    cc::Build::new()
+fn compile_wrapper(include_dirs: &[PathBuf]) {
+    let mut build = cc::Build::new();
+    build
         .cpp(true)
         .file("csrc/oiio_capi.cpp")
         .include("csrc")
-        .include(oiio_include)
-        .flag_if_supported("-std=c++17")
-        .compile("oiio_capi");
+        .flag_if_supported("-std=c++17");
+    for dir in include_dirs {
+        build.include(dir);
+    }
+    build.compile("oiio_capi");
 }
 
 fn link_oiio(lib_dir: &Path) {
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=OpenImageIO");
+    link_stdcpp();
+}
 
+fn link_stdcpp() {
     if cfg!(target_os = "linux") {
         println!("cargo:rustc-link-lib=dylib=stdc++");
     } else if cfg!(target_os = "macos") {

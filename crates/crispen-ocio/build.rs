@@ -7,7 +7,7 @@ fn main() {
     println!("cargo:rerun-if-changed=csrc/ocio_capi.cpp");
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_PREBUILT_DIR");
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_SOURCE_DIR");
-    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_INSTALL_EXT_PACKAGES");
+    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_SKIP_NATIVE_BUILD");
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_CMAKE_PREFIX_PATH");
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_MINIZIP_NG_ROOT");
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_MINIZIP_NG_DIR");
@@ -16,15 +16,16 @@ fn main() {
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_ZLIB_ROOT");
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_ZLIB_LIBRARY");
     println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_ZLIB_INCLUDE_DIR");
-    println!("cargo:rerun-if-env-changed=CRISPEN_OCIO_SKIP_NATIVE_BUILD");
 
     if env_truthy("CRISPEN_OCIO_SKIP_NATIVE_BUILD") {
         println!(
-            "cargo:warning=CRISPEN_OCIO_SKIP_NATIVE_BUILD=1: skipping OpenColorIO native build (check-only mode)"
+            "cargo:warning=CRISPEN_OCIO_SKIP_NATIVE_BUILD=1: \
+             skipping OpenColorIO native build (check-only mode)"
         );
         return;
     }
 
+    // Mode 1: Explicit prebuilt directory.
     if let Some(prebuilt_dir) = env_path("CRISPEN_OCIO_PREBUILT_DIR") {
         let include_dir = prebuilt_dir.join("include");
         let lib_dir = pick_lib_dir(&prebuilt_dir);
@@ -34,17 +35,31 @@ fn main() {
                 prebuilt_dir.display()
             );
         }
-        compile_wrapper(&include_dir);
+        compile_wrapper(&[include_dir]);
         link_ocio(&lib_dir);
         return;
     }
 
+    // Mode 2: System packages via pkg-config.
+    if let Ok(lib) = pkg_config::Config::new()
+        .atleast_version("2.0")
+        .probe("OpenColorIO")
+    {
+        // pkg-config emits cargo:rustc-link-lib and cargo:rustc-link-search.
+        compile_wrapper(&lib.include_paths);
+        link_stdcpp();
+        return;
+    }
+
+    // Mode 3: Build from source via CMake.
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("manifest dir"));
     let ocio_src = env_path("CRISPEN_OCIO_SOURCE_DIR")
         .unwrap_or_else(|| manifest_dir.join("../../extern/OpenColorIO"));
     if !ocio_src.exists() {
         panic!(
-            "OpenColorIO source not found at {}. Initialize submodules.",
+            "OpenColorIO not found.\n\
+             Install system packages:  sudo apt install libopencolorio-dev\n\
+             Or set CRISPEN_OCIO_PREBUILT_DIR, or provide source at {}.",
             ocio_src.display()
         );
     }
@@ -55,7 +70,8 @@ fn main() {
         panic!(
             "CRISPEN_OCIO_INSTALL_EXT_PACKAGES={requested} is not supported.\n\
              crispen-ocio enforces OCIO_INSTALL_EXT_PACKAGES=NONE for offline/reproducible builds.\n\
-             Provide dependencies locally (system packages or CRISPEN_OCIO_* hints), or use CRISPEN_OCIO_PREBUILT_DIR."
+             Provide dependencies locally (system packages or CRISPEN_OCIO_* hints), \
+             or use CRISPEN_OCIO_PREBUILT_DIR."
         );
     }
     let install_ext = "NONE";
@@ -75,24 +91,30 @@ fn main() {
 
     let ocio_dst = cmake_cfg.build();
 
-    compile_wrapper(&ocio_dst.join("include"));
+    compile_wrapper(&[ocio_dst.join("include")]);
     link_ocio(&pick_lib_dir(&ocio_dst));
 }
 
-fn compile_wrapper(ocio_include: &Path) {
-    cc::Build::new()
+fn compile_wrapper(include_dirs: &[PathBuf]) {
+    let mut build = cc::Build::new();
+    build
         .cpp(true)
         .file("csrc/ocio_capi.cpp")
         .include("csrc")
-        .include(ocio_include)
-        .flag_if_supported("-std=c++17")
-        .compile("ocio_capi");
+        .flag_if_supported("-std=c++17");
+    for dir in include_dirs {
+        build.include(dir);
+    }
+    build.compile("ocio_capi");
 }
 
 fn link_ocio(lib_dir: &Path) {
     println!("cargo:rustc-link-search=native={}", lib_dir.display());
     println!("cargo:rustc-link-lib=OpenColorIO");
+    link_stdcpp();
+}
 
+fn link_stdcpp() {
     if cfg!(target_os = "linux") {
         println!("cargo:rustc-link-lib=dylib=stdc++");
     } else if cfg!(target_os = "macos") {
