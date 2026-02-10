@@ -3,6 +3,7 @@
 #include <OpenColorIO/OpenColorIO.h>
 
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <string>
 
@@ -120,9 +121,17 @@ extern "C" OcioConfig * ocio_config_create_builtin(const char * uri)
 
     try
     {
+#if OCIO_VERSION_MAJOR > 2 || (OCIO_VERSION_MAJOR == 2 && OCIO_VERSION_MINOR >= 2)
         auto out = new OcioConfig;
         out->config = OCIO::Config::CreateFromBuiltinConfig(uri);
         return out;
+#else
+        set_error(
+            "Built-in OCIO configs require OpenColorIO 2.2+. "
+            "Use ocio_config_create_from_file() or ocio_config_create_from_env() instead."
+        );
+        return nullptr;
+#endif
     }
     catch (const OCIO::Exception & e)
     {
@@ -186,7 +195,17 @@ extern "C" const char * ocio_config_get_role(const OcioConfig * config, const ch
 
     try
     {
-        return empty_to_null(config->config->getRoleColorSpace(role));
+        // Iterate roles for compatibility with OCIO 2.1 (no string overload).
+        int num = config->config->getNumRoles();
+        for (int i = 0; i < num; i++)
+        {
+            const char * name = config->config->getRoleName(i);
+            if (name && std::strcmp(name, role) == 0)
+            {
+                return empty_to_null(config->config->getRoleColorSpace(i));
+            }
+        }
+        return nullptr;
     }
     catch (const std::exception & e)
     {
