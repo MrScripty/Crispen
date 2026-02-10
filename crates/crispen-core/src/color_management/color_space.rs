@@ -100,81 +100,86 @@ fn mat3_vec3_mul(m: &Mat3, v: [f64; 3]) -> [f64; 3] {
 // CIE chromaticity data
 // ---------------------------------------------------------------------------
 
-/// CIE xy chromaticity coordinates for a set of RGB primaries and white point.
-struct Chromaticity {
-    r: [f64; 2],
-    g: [f64; 2],
-    b: [f64; 2],
-    w: [f64; 2],
+/// CIE 1931 xy chromaticity coordinates for a set of RGB primaries and white point.
+#[derive(Debug, Clone, Copy)]
+pub struct CieChromaticity {
+    /// Red primary (x, y).
+    pub r: [f64; 2],
+    /// Green primary (x, y).
+    pub g: [f64; 2],
+    /// Blue primary (x, y).
+    pub b: [f64; 2],
+    /// White point (x, y).
+    pub w: [f64; 2],
 }
 
 const D65_WHITE: [f64; 2] = [0.3127, 0.3290];
 const ACES_WHITE: [f64; 2] = [0.32168, 0.33767];
 
-const REC709: Chromaticity = Chromaticity {
+const REC709: CieChromaticity = CieChromaticity {
     r: [0.6400, 0.3300],
     g: [0.3000, 0.6000],
     b: [0.1500, 0.0600],
     w: D65_WHITE,
 };
 
-const AP0: Chromaticity = Chromaticity {
+const AP0: CieChromaticity = CieChromaticity {
     r: [0.73470, 0.26530],
     g: [0.00000, 1.00000],
     b: [0.00010, -0.07700],
     w: ACES_WHITE,
 };
 
-const AP1: Chromaticity = Chromaticity {
+const AP1: CieChromaticity = CieChromaticity {
     r: [0.71300, 0.29300],
     g: [0.16500, 0.83000],
     b: [0.12800, 0.04400],
     w: ACES_WHITE,
 };
 
-const REC2020: Chromaticity = Chromaticity {
+const REC2020: CieChromaticity = CieChromaticity {
     r: [0.70800, 0.29200],
     g: [0.17000, 0.79700],
     b: [0.13100, 0.04600],
     w: D65_WHITE,
 };
 
-const DISPLAY_P3: Chromaticity = Chromaticity {
+const DISPLAY_P3: CieChromaticity = CieChromaticity {
     r: [0.68000, 0.32000],
     g: [0.26500, 0.69000],
     b: [0.15000, 0.06000],
     w: D65_WHITE,
 };
 
-const ARRI_WG3: Chromaticity = Chromaticity {
+const ARRI_WG3: CieChromaticity = CieChromaticity {
     r: [0.68400, 0.31300],
     g: [0.22100, 0.84800],
     b: [0.08610, -0.10200],
     w: D65_WHITE,
 };
 
-const ARRI_WG4: Chromaticity = Chromaticity {
+const ARRI_WG4: CieChromaticity = CieChromaticity {
     r: [0.73470, 0.26530],
     g: [0.14240, 0.85760],
     b: [0.09910, -0.03080],
     w: D65_WHITE,
 };
 
-const S_GAMUT3_CINE: Chromaticity = Chromaticity {
+const S_GAMUT3_CINE: CieChromaticity = CieChromaticity {
     r: [0.76600, 0.27500],
     g: [0.22500, 0.80000],
     b: [0.08900, -0.08700],
     w: D65_WHITE,
 };
 
-const RED_WIDE_GAMUT: Chromaticity = Chromaticity {
+const RED_WIDE_GAMUT: CieChromaticity = CieChromaticity {
     r: [0.78010, 0.30490],
     g: [0.12120, 1.49310],
     b: [0.09530, -0.08490],
     w: D65_WHITE,
 };
 
-const V_GAMUT: Chromaticity = Chromaticity {
+const V_GAMUT: CieChromaticity = CieChromaticity {
     r: [0.73000, 0.28000],
     g: [0.16500, 0.84000],
     b: [0.10000, -0.03000],
@@ -196,7 +201,7 @@ const V_GAMUT: Chromaticity = Chromaticity {
 ///
 /// # Reference
 /// IEC 61966-2-1:1999, Annex F
-fn compute_npm(c: &Chromaticity) -> Mat3 {
+fn compute_npm(c: &CieChromaticity) -> Mat3 {
     let xr = c.r[0] / c.r[1];
     let zr = (1.0 - c.r[0] - c.r[1]) / c.r[1];
     let xg = c.g[0] / c.g[1];
@@ -302,7 +307,7 @@ fn gamut_of(space: ColorSpaceId) -> Gamut {
     }
 }
 
-fn chromaticity_of(gamut: Gamut) -> &'static Chromaticity {
+fn chromaticity_of(gamut: Gamut) -> &'static CieChromaticity {
     match gamut {
         Gamut::Rec709 => &REC709,
         Gamut::Ap0 => &AP0,
@@ -360,6 +365,16 @@ pub fn get_conversion_matrix(from: ColorSpaceId, to: ColorSpaceId) -> ColorMatri
     let m_to_xyz = to_xyz_d65(from_gamut);
     let m_from_xyz = from_xyz_d65(to_gamut);
     ColorMatrix(mat3_mul(&m_from_xyz, &m_to_xyz))
+}
+
+/// Get the CIE 1931 xy chromaticity coordinates for a color space.
+///
+/// Returns the R, G, B primary coordinates and white point used by the
+/// gamut associated with this color space. Multiple `ColorSpaceId`s that
+/// share the same gamut (e.g. `Srgb` and `LinearSrgb`) return identical
+/// coordinates.
+pub fn chromaticity(id: ColorSpaceId) -> &'static CieChromaticity {
+    chromaticity_of(gamut_of(id))
 }
 
 #[cfg(test)]

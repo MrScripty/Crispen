@@ -4,3 +4,5 @@ pub mod aces;
 pub mod color_space;
 pub mod transfer;
 pub mod white_balance;
+
+pub use color_space::{CieChromaticity, chromaticity};
