@@ -82,8 +82,8 @@ pub fn sync_dials_to_params(
 /// Observer: sync wheel value changes to GradingState lift/gamma/gain/offset.
 ///
 /// Converts the 0..1 Vec2 position to \[R, G, B, Master\] channel adjustments:
-/// - X axis: R-G balance (right = more red, left = more green)
-/// - Y axis: B channel (down = more blue, up = less blue)
+/// - X axis: B channel (right = more blue, left = less blue) → aligns with Cb (vectorscope X)
+/// - Y axis: R-G balance (down = more red, up = more green) → aligns with Cr (vectorscope Y)
 pub fn on_wheel_value_change(
     event: On<ValueChange<Vec2>>,
     wheels: Query<&WheelType>,
@@ -100,19 +100,21 @@ pub fn on_wheel_value_change(
     let channels = match wheel_type {
         WheelType::Lift | WheelType::Offset => {
             // Additive channels (neutral = 0).
+            // X → B (Cb direction), Y → R/G balance (Cr direction).
             let master = match wheel_type {
                 WheelType::Lift => state.params.lift[3],
                 _ => state.params.offset[3],
             };
-            [dx, -dx, dy, master]
+            [dy, -dy, dx, master]
         }
         WheelType::Gamma | WheelType::Gain => {
             // Multiplicative channels (neutral = 1).
+            // X → B (Cb direction), Y → R/G balance (Cr direction).
             let master = match wheel_type {
                 WheelType::Gamma => state.params.gamma[3],
                 _ => state.params.gain[3],
             };
-            [1.0 + dx, 1.0 - dx, 1.0 + dy, master]
+            [1.0 + dy, 1.0 - dy, 1.0 + dx, master]
         }
     };
 
@@ -294,12 +296,12 @@ pub fn sync_params_to_wheels(
         // Reverse the channel → Vec2 mapping.
         let (dx, dy) = match wheel_type {
             WheelType::Lift | WheelType::Offset => {
-                // Additive: R = dx, G = -dx, B = dy → dx = (R-G)/2, dy = B
-                ((channels[0] - channels[1]) / 2.0, channels[2])
+                // Additive: R = dy, G = -dy, B = dx → dx = B, dy = (R-G)/2
+                (channels[2], (channels[0] - channels[1]) / 2.0)
             }
             WheelType::Gamma | WheelType::Gain => {
-                // Multiplicative: R = 1+dx, G = 1-dx, B = 1+dy
-                ((channels[0] - channels[1]) / 2.0, channels[2] - 1.0)
+                // Multiplicative: R = 1+dy, G = 1-dy, B = 1+dx → dx = B-1, dy = (R-G)/2
+                (channels[2] - 1.0, (channels[0] - channels[1]) / 2.0)
             }
         };
 
