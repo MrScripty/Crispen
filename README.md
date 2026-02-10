@@ -1,27 +1,55 @@
 # Crispen
 
-Lightweight color grading suite resembling Davinci Resolve(TM) color page. Supports OpenColorIO and OpenFX. Can be used as a stand-alone app for fast color adjustments, or as a LIB for embedding into other software. 
+Lightweight color grading suite resembling Davinci Resolve(TM) color page. Supports OpenColorIO and OpenFX. Can be used as a stand-alone app for fast color adjustments, or as a LIB for embedding into other software.
 
 Serves as the color module for Studio Whip, providing optomized support for real-time grading of hybrid 3D/2D scenes.
 
-## CI: Prebuilt OCIO Setup
+## Prerequisites
 
-The GitHub Actions workflow includes a `build-ocio-prebuilt` job that builds
-the demo with `--features ocio` using a prebuilt OCIO install path.
-
-Required repository variable:
-
-- `CRISPEN_OCIO_PREBUILT_DIR`
-  - Set this in GitHub: `Settings -> Secrets and variables -> Actions -> Variables`.
-  - Value must be an absolute path on the CI runner to an OCIO install prefix.
-  - The path must contain:
-    - `include/`
-    - `lib/` or `lib64/`
-
-If this variable is unset, the `build-ocio-prebuilt` job is skipped.
-
-Local equivalent:
+### System Dependencies (Ubuntu/Debian)
 
 ```bash
-make ci-build-ocio PREBUILT_OCIO_DIR=/path/to/opencolorio-install
+sudo apt install libopencolorio-dev libopenimageio-dev
+```
+
+These provide the OpenColorIO (OCIO) and OpenImageIO (OIIO) libraries used for
+color management and image I/O. The build scripts discover them automatically
+via `pkg-config`.
+
+### Rust
+
+Install via [rustup](https://rustup.rs/).
+
+## Building
+
+```bash
+# Core workspace (no OCIO/OIIO features)
+cargo build --workspace
+
+# Full build with color management and image I/O
+cargo build --workspace --features crispen-demo/ocio
+
+# Run the demo app
+cargo run -p crispen-demo --features ocio
+```
+
+## Linting
+
+```bash
+make ci-lint
+```
+
+## Advanced: Overriding Library Paths
+
+If you need a specific OIIO/OCIO version instead of system packages, the build
+scripts support explicit overrides (checked before pkg-config):
+
+```bash
+# Point to a custom install prefix
+export CRISPEN_OIIO_PREBUILT_DIR=/opt/oiio-2.5
+export CRISPEN_OCIO_PREBUILT_DIR=/opt/ocio-2.3
+
+# Or skip native builds entirely (check-only / lint mode)
+export CRISPEN_OIIO_SKIP_NATIVE_BUILD=1
+export CRISPEN_OCIO_SKIP_NATIVE_BUILD=1
 ```
