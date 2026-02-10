@@ -9,11 +9,14 @@ on:
 
 jobs:
   lint:
-    name: Lint (OCIO native build skipped)
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libopencolorio-dev libopenimageio-dev
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -22,17 +25,17 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Run strict clippy
-        run: make ci-lint
+        run: cargo clippy --workspace --all-targets --features crispen-demo/ocio -- -D warnings
 
-  build-ocio-prebuilt:
-    name: Build with prebuilt OCIO
-    if: ${{ vars.CRISPEN_OCIO_PREBUILT_DIR != '' }}
+  build:
+    name: Build & Test
     runs-on: ubuntu-latest
-    env:
-      PREBUILT_OCIO_DIR: ${{ vars.CRISPEN_OCIO_PREBUILT_DIR }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libopencolorio-dev libopenimageio-dev
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
@@ -40,5 +43,8 @@ jobs:
       - name: Cache Cargo artifacts
         uses: Swatinem/rust-cache@v2
 
-      - name: Build OCIO-enabled demo with prebuilt install
-        run: make ci-build-ocio PREBUILT_OCIO_DIR="$PREBUILT_OCIO_DIR"
+      - name: Build workspace
+        run: cargo build --workspace --features crispen-demo/ocio
+
+      - name: Run tests
+        run: cargo test --workspace --features crispen-demo/ocio
