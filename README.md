@@ -1,6 +1,8 @@
 # Crispen
 
-Rust-based color grading workspace with optional OpenColorIO integration.
+Lightweight color grading suite resembling Davinci Resolve(TM) color page. Supports OpenColorIO and OpenFX. Can be used as a stand-alone app for fast color adjustments, or as a LIB for embedding into other software. 
+
+Serves as the color module for Studio Whip, providing optomized support for real-time grading of hybrid 3D/2D scenes.
 
 ## CI: Prebuilt OCIO Setup
 
