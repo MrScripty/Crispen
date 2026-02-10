@@ -3,6 +3,7 @@
 //! This mirrors the Resolve-style "Hue vs Curves" area with mode tabs
 //! and a curve plot preview.
 
+use bevy::picking::Pickable;
 use bevy::picking::events::{Cancel, Drag, DragEnd, DragStart, Pointer, Press};
 use bevy::prelude::*;
 use bevy::ui::{ComputedNode, ComputedUiRenderTargetInfo, UiGlobalTransform, UiScale};
@@ -10,9 +11,15 @@ use crispen_bevy::resources::GradingState;
 
 use super::theme;
 
-const CURVE_POINT_COUNT: usize = 5;
 const CURVE_TRACE_SAMPLES: usize = 84;
-const CURVE_POINT_X: [f32; CURVE_POINT_COUNT] = [0.0, 0.25, 0.5, 0.75, 1.0];
+const CURVE_THUMB_SIZE: f32 = 8.0;
+
+#[derive(Debug, Clone, Copy)]
+struct CurvePoint {
+    id: u32,
+    x: f32,
+    y: f32,
+}
 
 /// Available curve modes in this panel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,25 +43,27 @@ impl HueCurveMode {
 #[derive(Resource)]
 pub struct HueCurvesState {
     mode: HueCurveMode,
-    hue_vs_hue: [f32; CURVE_POINT_COUNT],
-    hue_vs_sat: [f32; CURVE_POINT_COUNT],
-    lum_vs_sat: [f32; CURVE_POINT_COUNT],
+    hue_vs_hue: Vec<CurvePoint>,
+    hue_vs_sat: Vec<CurvePoint>,
+    lum_vs_sat: Vec<CurvePoint>,
+    next_point_id: u32,
 }
 
 impl Default for HueCurvesState {
     fn default() -> Self {
         Self {
             mode: HueCurveMode::HueVsHue,
-            // Resolve-style neutral curve starts as a flat line at center.
-            hue_vs_hue: [0.5; CURVE_POINT_COUNT],
-            hue_vs_sat: [0.5; CURVE_POINT_COUNT],
-            lum_vs_sat: [0.5; CURVE_POINT_COUNT],
+            // Start with no nodes; empty vectors map to identity curves.
+            hue_vs_hue: Vec::new(),
+            hue_vs_sat: Vec::new(),
+            lum_vs_sat: Vec::new(),
+            next_point_id: 1,
         }
     }
 }
 
 impl HueCurvesState {
-    fn points_for_mode(&self, mode: HueCurveMode) -> &[f32; CURVE_POINT_COUNT] {
+    fn points_for_mode(&self, mode: HueCurveMode) -> &[CurvePoint] {
         match mode {
             HueCurveMode::HueVsHue => &self.hue_vs_hue,
             HueCurveMode::HueVsSat => &self.hue_vs_sat,
@@ -62,7 +71,7 @@ impl HueCurvesState {
         }
     }
 
-    fn points_for_mode_mut(&mut self, mode: HueCurveMode) -> &mut [f32; CURVE_POINT_COUNT] {
+    fn points_for_mode_mut(&mut self, mode: HueCurveMode) -> &mut Vec<CurvePoint> {
         match mode {
             HueCurveMode::HueVsHue => &mut self.hue_vs_hue,
             HueCurveMode::HueVsSat => &mut self.hue_vs_sat,
@@ -70,12 +79,33 @@ impl HueCurvesState {
         }
     }
 
-    fn active_points(&self) -> &[f32; CURVE_POINT_COUNT] {
+    fn active_points(&self) -> &[CurvePoint] {
         self.points_for_mode(self.mode)
     }
 
-    fn active_points_mut(&mut self) -> &mut [f32; CURVE_POINT_COUNT] {
+    fn active_points_mut(&mut self) -> &mut Vec<CurvePoint> {
         self.points_for_mode_mut(self.mode)
+    }
+
+    fn add_active_point(&mut self, x: f32, y: f32) {
+        let point = CurvePoint {
+            id: self.next_point_id,
+            x: x.clamp(0.0, 1.0),
+            y: y.clamp(0.0, 1.0),
+        };
+        self.next_point_id = self.next_point_id.wrapping_add(1);
+        let points = self.active_points_mut();
+        points.push(point);
+        points.sort_by(|a, b| a.x.total_cmp(&b.x));
+    }
+
+    fn update_active_point(&mut self, point_id: u32, x: f32, y: f32) {
+        let points = self.active_points_mut();
+        if let Some(point) = points.iter_mut().find(|point| point.id == point_id) {
+            point.x = x.clamp(0.0, 1.0);
+            point.y = y.clamp(0.0, 1.0);
+            points.sort_by(|a, b| a.x.total_cmp(&b.x));
+        }
     }
 }
 
@@ -90,7 +120,7 @@ struct HueCurveModeButton(HueCurveMode);
 /// Marker on draggable control points.
 #[derive(Component)]
 struct HueCurveThumb {
-    index: usize,
+    point_id: u32,
 }
 
 /// Marker on sample nodes used to draw the curve trace.
@@ -216,6 +246,7 @@ fn spawn_grid_lines(plot: &mut ChildSpawnerCommands) {
                 ..default()
             },
             BackgroundColor(theme::CURVE_GRID_LINE),
+            Pickable::IGNORE,
         ));
         plot.spawn((
             Node {
@@ -227,6 +258,7 @@ fn spawn_grid_lines(plot: &mut ChildSpawnerCommands) {
                 ..default()
             },
             BackgroundColor(theme::CURVE_GRID_LINE),
+            Pickable::IGNORE,
         ));
     }
 }
@@ -242,6 +274,7 @@ fn spawn_neutral_line(plot: &mut ChildSpawnerCommands) {
             ..default()
         },
         BackgroundColor(theme::CURVE_NEUTRAL_LINE),
+        Pickable::IGNORE,
     ));
 }
 
@@ -260,42 +293,26 @@ fn spawn_curve_trace(plot: &mut ChildSpawnerCommands) {
                 ..default()
             },
             BackgroundColor(theme::TEXT_PRIMARY),
-        ));
-    }
-
-    for (index, t) in CURVE_POINT_X.into_iter().enumerate() {
-        plot.spawn((
-            HueCurveThumb { index },
-            HueCurveDragState::default(),
-            Node {
-                position_type: PositionType::Absolute,
-                left: Val::Percent(t * 100.0),
-                top: Val::Percent(50.0),
-                width: Val::Px(8.0),
-                height: Val::Px(8.0),
-                margin: UiRect::all(Val::Px(-4.0)),
-                border: UiRect::all(Val::Px(1.0)),
-                border_radius: BorderRadius::all(Val::Px(4.0)),
-                ..default()
-            },
-            BackgroundColor(theme::ACCENT),
-            BorderColor::all(Color::BLACK),
+            Pickable::IGNORE,
         ));
     }
 }
 
 fn spawn_hue_markers(plot: &mut ChildSpawnerCommands) {
-    plot.spawn(Node {
-        position_type: PositionType::Absolute,
-        left: Val::Px(10.0),
-        right: Val::Px(10.0),
-        bottom: Val::Px(10.0),
-        display: Display::Flex,
-        flex_direction: FlexDirection::Row,
-        justify_content: JustifyContent::SpaceBetween,
-        align_items: AlignItems::Center,
-        ..default()
-    })
+    plot.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            left: Val::Px(10.0),
+            right: Val::Px(10.0),
+            bottom: Val::Px(10.0),
+            display: Display::Flex,
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        Pickable::IGNORE,
+    ))
     .with_children(|swatches| {
         for color in [
             Color::srgb(0.98, 0.20, 0.20),
@@ -313,6 +330,7 @@ fn spawn_hue_markers(plot: &mut ChildSpawnerCommands) {
                     ..default()
                 },
                 BackgroundColor(color),
+                Pickable::IGNORE,
             ));
         }
     });
@@ -362,7 +380,47 @@ fn update_control_from_pointer(
     let normalized =
         pointer_to_plot_normalized(pointer_pos, node, node_target, transform, ui_scale);
     // UI y is top-down; curve y is bottom-up.
-    state.active_points_mut()[thumb.index] = (1.0 - normalized.y).clamp(0.0, 1.0);
+    state.update_active_point(
+        thumb.point_id,
+        normalized.x.clamp(0.0, 1.0),
+        (1.0 - normalized.y).clamp(0.0, 1.0),
+    );
+}
+
+fn on_curve_plot_press(
+    mut press: On<Pointer<Press>>,
+    q_plot: Query<
+        (
+            &ComputedNode,
+            &ComputedUiRenderTargetInfo,
+            &UiGlobalTransform,
+        ),
+        With<HueCurvePlot>,
+    >,
+    ui_scale: Res<UiScale>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut state: ResMut<HueCurvesState>,
+) {
+    let Ok((node, node_target, transform)) = q_plot.get(press.entity) else {
+        return;
+    };
+    let ctrl_pressed = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+    if !ctrl_pressed {
+        return;
+    }
+
+    press.propagate(false);
+    let normalized = pointer_to_plot_normalized(
+        press.pointer_location.position,
+        node,
+        node_target,
+        transform,
+        ui_scale.0,
+    );
+    state.add_active_point(
+        normalized.x.clamp(0.0, 1.0),
+        (1.0 - normalized.y).clamp(0.0, 1.0),
+    );
 }
 
 fn on_curve_thumb_press(
@@ -497,22 +555,41 @@ fn handle_curve_mode_buttons(
     }
 }
 
-fn sample_curve(points: &[f32; CURVE_POINT_COUNT], t: f32) -> f32 {
-    let clamped_t = t.clamp(0.0, 1.0);
-    let segment = (clamped_t * (CURVE_POINT_COUNT - 1) as f32)
-        .floor()
-        .clamp(0.0, (CURVE_POINT_COUNT - 2) as f32) as usize;
-    let t0 = CURVE_POINT_X[segment];
-    let t1 = CURVE_POINT_X[segment + 1];
-    let y0 = points[segment];
-    let y1 = points[segment + 1];
-
-    if (t1 - t0).abs() <= f32::EPSILON {
-        y0
-    } else {
-        let local = ((clamped_t - t0) / (t1 - t0)).clamp(0.0, 1.0);
-        y0 + (y1 - y0) * local
+fn sample_curve(points: &[CurvePoint], t: f32) -> f32 {
+    match points.len() {
+        0 => return 0.5,
+        1 => return points[0].y,
+        _ => {}
     }
+
+    let mut wrapped_t = t.rem_euclid(1.0);
+    if (t - 1.0).abs() <= f32::EPSILON {
+        wrapped_t = 0.0;
+    }
+
+    for idx in 0..points.len() {
+        let a = points[idx];
+        let b = points[(idx + 1) % points.len()];
+        let x0 = a.x;
+        let mut x1 = b.x;
+        if idx == points.len() - 1 {
+            x1 += 1.0;
+        }
+
+        let mut segment_t = wrapped_t;
+        if segment_t < x0 {
+            segment_t += 1.0;
+        }
+        if segment_t >= x0 && segment_t <= x1 {
+            if (x1 - x0).abs() <= f32::EPSILON {
+                return b.y;
+            }
+            let local = ((segment_t - x0) / (x1 - x0)).clamp(0.0, 1.0);
+            return a.y + (b.y - a.y) * local;
+        }
+    }
+
+    points[0].y
 }
 
 fn sync_curve_tab_visuals(
@@ -563,21 +640,28 @@ fn map_ui_to_sat_factor(y: f32) -> f32 {
     (y * 2.0).clamp(0.0, 2.0)
 }
 
-fn points_to_grading_curve(
-    mode: HueCurveMode,
-    y_points: &[f32; CURVE_POINT_COUNT],
-) -> Vec<[f32; 2]> {
-    CURVE_POINT_X
-        .into_iter()
-        .zip(y_points.iter().copied())
-        .map(|(x, y)| {
-            let out_y = match mode {
-                HueCurveMode::HueVsHue => map_ui_to_hue_offset(y),
-                HueCurveMode::HueVsSat | HueCurveMode::LumVsSat => map_ui_to_sat_factor(y),
-            };
-            [x, out_y]
-        })
-        .collect()
+fn points_to_grading_curve(mode: HueCurveMode, points: &[CurvePoint]) -> Vec<[f32; 2]> {
+    if points.is_empty() {
+        return Vec::new();
+    }
+
+    let map_y = |y: f32| match mode {
+        HueCurveMode::HueVsHue => map_ui_to_hue_offset(y),
+        HueCurveMode::HueVsSat | HueCurveMode::LumVsSat => map_ui_to_sat_factor(y),
+    };
+
+    // Bake seam anchors from wrapped interpolation so x=0 and x=1 always match.
+    let seam_y = sample_curve(points, 0.0);
+    let mut out = Vec::with_capacity(points.len() + 2);
+    out.push([0.0, map_y(seam_y)]);
+    for point in points {
+        if point.x > 0.0 && point.x < 1.0 {
+            out.push([point.x, map_y(point.y)]);
+        }
+    }
+    out.push([1.0, map_y(seam_y)]);
+    out.sort_by(|a, b| a[0].total_cmp(&b[0]));
+    out
 }
 
 fn sync_hue_curves_to_grading_params(
@@ -614,8 +698,11 @@ fn sync_hue_curves_to_grading_params(
 #[allow(clippy::type_complexity)]
 fn sync_curve_visuals(
     state: Res<HueCurvesState>,
+    q_plot: Query<Entity, With<HueCurvePlot>>,
+    mut commands: Commands,
     mut thumbs: Query<
         (
+            Entity,
             &HueCurveThumb,
             &HueCurveDragState,
             &mut Node,
@@ -628,17 +715,57 @@ fn sync_curve_visuals(
         (With<HueCurveTraceSample>, Without<HueCurveThumb>),
     >,
 ) {
+    let Some(plot_entity) = q_plot.iter().next() else {
+        return;
+    };
     let active_points = state.active_points();
+    let mut present_ids = Vec::with_capacity(active_points.len());
 
-    for (thumb, drag_state, mut node, mut bg) in thumbs.iter_mut() {
-        let y = active_points[thumb.index];
-        node.left = Val::Percent(CURVE_POINT_X[thumb.index] * 100.0);
-        node.top = Val::Percent((1.0 - y) * 100.0);
+    for (entity, thumb, drag_state, mut node, mut bg) in thumbs.iter_mut() {
+        let Some(point) = active_points
+            .iter()
+            .find(|point| point.id == thumb.point_id)
+            .copied()
+        else {
+            commands.entity(entity).despawn();
+            continue;
+        };
+
+        present_ids.push(point.id);
+        node.left = Val::Percent(point.x * 100.0);
+        node.top = Val::Percent((1.0 - point.y) * 100.0);
         bg.0 = if drag_state.active {
             Color::WHITE
         } else {
             theme::ACCENT
         };
+    }
+
+    if !active_points.is_empty() {
+        commands.entity(plot_entity).with_children(|plot| {
+            for point in active_points {
+                if present_ids.contains(&point.id) {
+                    continue;
+                }
+                plot.spawn((
+                    HueCurveThumb { point_id: point.id },
+                    HueCurveDragState::default(),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: Val::Percent(point.x * 100.0),
+                        top: Val::Percent((1.0 - point.y) * 100.0),
+                        width: Val::Px(CURVE_THUMB_SIZE),
+                        height: Val::Px(CURVE_THUMB_SIZE),
+                        margin: UiRect::all(Val::Px(-CURVE_THUMB_SIZE * 0.5)),
+                        border: UiRect::all(Val::Px(1.0)),
+                        border_radius: BorderRadius::all(Val::Px(CURVE_THUMB_SIZE * 0.5)),
+                        ..default()
+                    },
+                    BackgroundColor(theme::ACCENT),
+                    BorderColor::all(Color::BLACK),
+                ));
+            }
+        });
     }
 
     for (sample, mut node) in samples.iter_mut() {
@@ -663,7 +790,8 @@ impl Plugin for HueCurvesPlugin {
             ),
         );
         app.add_systems(PostUpdate, sync_curve_visuals);
-        app.add_observer(on_curve_thumb_press)
+        app.add_observer(on_curve_plot_press)
+            .add_observer(on_curve_thumb_press)
             .add_observer(on_curve_thumb_drag_start)
             .add_observer(on_curve_thumb_drag)
             .add_observer(on_curve_thumb_drag_end)
