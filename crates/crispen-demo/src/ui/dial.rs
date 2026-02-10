@@ -6,13 +6,15 @@
 use bevy::asset::embedded_asset;
 use bevy::picking::{
     Pickable,
-    events::{Cancel, Drag, DragEnd, DragStart, Pointer, Press},
+    events::{Cancel, Click, Drag, DragEnd, DragStart, Pointer, Press},
+    pointer::PointerButton,
 };
 use bevy::prelude::*;
 use bevy::render::render_resource::AsBindGroup;
 use bevy::shader::ShaderRef;
 use bevy::ui::{InteractionDisabled, UiTransform, Val2};
 use bevy::ui_render::prelude::{MaterialNode, UiMaterial, UiMaterialPlugin};
+use std::time::{Duration, Instant};
 
 use super::components::ParamId;
 use super::theme;
@@ -21,6 +23,8 @@ use super::theme;
 
 /// Pixels of vertical drag for a full min→max sweep.
 const DRAG_PIXELS_FULL_RANGE: f32 = 200.0;
+/// Max time between two primary clicks to treat as a double-click reset.
+const DOUBLE_CLICK_MAX_GAP: Duration = Duration::from_millis(350);
 
 // ── Components ──────────────────────────────────────────────────────────────
 
@@ -38,6 +42,10 @@ pub struct DialRange {
 /// Step increment for snapping.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct DialStep(pub f32);
+
+/// Identity/default value restored on double-click reset.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct DialDefaultValue(pub f32);
 
 /// Links a dial to a grading parameter.
 #[derive(Component, Debug, Clone, Copy)]
@@ -64,6 +72,12 @@ struct DialDragState {
     active: bool,
     start_y: f32,
     start_value: f32,
+}
+
+/// Tracks click timing for local double-click detection.
+#[derive(Component, Default)]
+struct DialClickState {
+    last_primary_click_at: Option<Instant>,
 }
 
 // ── Material ────────────────────────────────────────────────────────────────
@@ -151,12 +165,14 @@ pub fn spawn_param_dial(
                         max: range.1,
                     },
                     DialStep(step),
+                    DialDefaultValue(default_val),
                     ParamDial(param_id),
                     DialDragState {
                         active: false,
                         start_y: 0.0,
                         start_value: default_val,
                     },
+                    DialClickState::default(),
                 ))
                 .id();
 
@@ -318,6 +334,60 @@ fn on_dial_drag_cancel(
     }
 }
 
+fn on_dial_click(
+    mut click: On<Pointer<Click>>,
+    mut q_dials: Query<
+        (
+            &mut DialValue,
+            &DialDefaultValue,
+            &DialRange,
+            &mut DialClickState,
+            Has<InteractionDisabled>,
+        ),
+        With<DialInner>,
+    >,
+    mut materials: ResMut<Assets<DialMaterial>>,
+    q_material: Query<&MaterialNode<DialMaterial>>,
+) {
+    if click.button != PointerButton::Primary {
+        return;
+    }
+
+    if let Ok((mut value, default_value, range, mut click_state, disabled)) =
+        q_dials.get_mut(click.entity)
+    {
+        click.propagate(false);
+        if disabled {
+            return;
+        }
+
+        let now = Instant::now();
+        let is_double_click = click_state
+            .last_primary_click_at
+            .is_some_and(|last| now.duration_since(last) <= DOUBLE_CLICK_MAX_GAP);
+        click_state.last_primary_click_at = Some(now);
+
+        if !is_double_click {
+            return;
+        }
+
+        // Consume this pair so a rapid third click doesn't immediately re-trigger.
+        click_state.last_primary_click_at = None;
+
+        if (value.0 - default_value.0).abs() <= f32::EPSILON {
+            return;
+        }
+
+        value.0 = default_value.0;
+
+        if let Ok(mat_node) = q_material.get(click.entity)
+            && let Some(mat) = materials.get_mut(mat_node.id())
+        {
+            mat.value_norm = normalize_value(default_value.0, range.min, range.max);
+        }
+    }
+}
+
 // ── Systems ─────────────────────────────────────────────────────────────────
 
 /// Lazily insert `MaterialNode<DialMaterial>` on dial inner nodes.
@@ -374,6 +444,7 @@ impl Plugin for DialPlugin {
         app.add_plugins(UiMaterialPlugin::<DialMaterial>::default());
         app.add_systems(PostUpdate, update_dial_material);
         app.add_observer(on_dial_press)
+            .add_observer(on_dial_click)
             .add_observer(on_dial_drag_start)
             .add_observer(on_dial_drag)
             .add_observer(on_dial_drag_end)
