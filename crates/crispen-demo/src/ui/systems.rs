@@ -178,10 +178,18 @@ pub fn handle_load_image_shortcut(
         return;
     }
 
-    let Some(path) = rfd::FileDialog::new()
-        .add_filter("JPEG images", &["jpg", "jpeg"])
-        .set_title("Load Image")
-        .pick_file()
+    let dialog = rfd::FileDialog::new().set_title("Load Image");
+    #[cfg(feature = "ocio")]
+    let dialog = dialog.add_filter(
+        "Images",
+        &[
+            "jpg", "jpeg", "png", "tif", "tiff", "exr", "dpx", "cin", "hdr", "bmp", "tga",
+            "webp", "psd", "gif",
+        ],
+    );
+    #[cfg(not(feature = "ocio"))]
+    let dialog = dialog.add_filter("Images", &["jpg", "jpeg", "png", "tif", "tiff", "exr"]);
+    let Some(path) = dialog.pick_file()
     else {
         return;
     };
@@ -209,20 +217,34 @@ fn load_image_from_path(
     #[cfg(feature = "ocio")] ocio_state: Option<&mut OcioColorManagement>,
     image_loaded: &mut MessageWriter<ImageLoadedEvent>,
 ) {
-    let image = match image_loader::load_image_for_display(path, preview_size) {
-        Ok(img) => img,
+    // Use OIIO when available (auto-detects color space from metadata),
+    // fall back to the `image` crate otherwise.
+    #[cfg(feature = "ocio")]
+    let loaded = match image_loader::load_image_oiio(path, preview_size) {
+        Ok(loaded) => loaded,
+        Err(e) => {
+            tracing::error!("Failed to load image {}: {e}", path.display());
+            return;
+        }
+    };
+    #[cfg(not(feature = "ocio"))]
+    let loaded = match image_loader::load_image_for_display(path, preview_size) {
+        Ok(loaded) => loaded,
         Err(e) => {
             tracing::error!("Failed to load image {}: {e}", path.display());
             return;
         }
     };
 
+    let image = loaded.image;
+
     tracing::info!(
-        "Loaded image: {}x{} {:?} from {}",
+        "Loaded image: {}x{} {:?} from {} (color space: {:?})",
         image.width,
         image.height,
         image.source_bit_depth,
         path.display(),
+        loaded.detected_color_space,
     );
 
     let width = image.width;
@@ -240,9 +262,15 @@ fn load_image_from_path(
 
     #[cfg(feature = "ocio")]
     if let Some(ocio) = ocio_state {
-        let detected_space = grading_state.params.color_management.input_space;
-        ocio.input_space =
-            crate::ocio_support::map_detected_to_ocio_name(detected_space, &ocio.config);
+        // Prefer the color space OIIO detected from file metadata; fall back
+        // to the manual mapping from ColorSpaceId.
+        if let Some(ref cs) = loaded.detected_color_space {
+            ocio.input_space = cs.clone();
+        } else {
+            let detected_space = grading_state.params.color_management.input_space;
+            ocio.input_space =
+                crate::ocio_support::map_detected_to_ocio_name(detected_space, &ocio.config);
+        }
         ocio.dirty = true;
     }
 

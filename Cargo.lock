@@ -2019,6 +2019,7 @@ dependencies = [
  "crispen-core",
  "crispen-ocio",
  "crispen-ofx",
+ "crispen-oiio",
  "futures-util",
  "image",
  "rfd",
@@ -2062,6 +2063,16 @@ dependencies = [
  "openfx-sys",
  "thiserror 2.0.18",
  "tracing",
+]
+
+[[package]]
+name = "crispen-oiio"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "cmake",
+ "crispen-core",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

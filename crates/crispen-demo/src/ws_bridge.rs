@@ -257,8 +257,15 @@ fn handle_load_image(
     outbound: &mut ResMut<OutboundUiMessages>,
     image_loaded: &mut MessageWriter<ImageLoadedEvent>,
 ) {
-    match image_loader::load_image_for_display(Path::new(path), preview_size) {
-        Ok(img) => {
+    // Use OIIO when available, fall back to the `image` crate otherwise.
+    #[cfg(feature = "ocio")]
+    let result = image_loader::load_image_oiio(Path::new(path), preview_size);
+    #[cfg(not(feature = "ocio"))]
+    let result = image_loader::load_image_for_display(Path::new(path), preview_size);
+
+    match result {
+        Ok(loaded) => {
+            let img = loaded.image;
             let width = img.width;
             let height = img.height;
             let bit_depth = format!("{:?}", img.source_bit_depth);
@@ -274,9 +281,15 @@ fn handle_load_image(
 
             #[cfg(feature = "ocio")]
             if let Some(ocio) = ocio_state {
-                let detected_space = state.params.color_management.input_space;
-                ocio.input_space =
-                    crate::ocio_support::map_detected_to_ocio_name(detected_space, &ocio.config);
+                if let Some(ref cs) = loaded.detected_color_space {
+                    ocio.input_space = cs.clone();
+                } else {
+                    let detected_space = state.params.color_management.input_space;
+                    ocio.input_space = crate::ocio_support::map_detected_to_ocio_name(
+                        detected_space,
+                        &ocio.config,
+                    );
+                }
                 ocio.dirty = true;
             }
 
