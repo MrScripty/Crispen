@@ -247,6 +247,7 @@ fn dispatch_ui_message(
 }
 
 /// Load an image from disk, upload to GPU, and update ECS state.
+#[allow(clippy::too_many_arguments)]
 fn handle_load_image(
     path: &str,
     preview_size: Option<(u32, u32)>,

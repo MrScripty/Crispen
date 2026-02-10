@@ -334,6 +334,7 @@ fn on_dial_drag_cancel(
     }
 }
 
+#[allow(clippy::type_complexity)]
 fn on_dial_click(
     mut click: On<Pointer<Click>>,
     mut q_dials: Query<
