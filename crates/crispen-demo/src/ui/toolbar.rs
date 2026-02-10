@@ -1,5 +1,6 @@
 //! Top toolbar containing color-management dropdowns and viewer toggles.
 
+use bevy::input::keyboard::{Key, KeyboardInput};
 use bevy::prelude::*;
 use crispen_bevy::resources::GradingState;
 #[cfg(feature = "ocio")]
@@ -14,6 +15,8 @@ pub struct ToolbarState {
     pub active_dropdown: Option<ToolbarDropdownKind>,
     pub split_view_active: bool,
     pub ofx_panel_visible: bool,
+    /// Current search query used to filter the active dropdown's options.
+    pub search_query: String,
 }
 
 /// Kinds of dropdowns supported by the toolbar.
@@ -67,6 +70,14 @@ pub struct ToolbarDropdownOption {
     pub kind: ToolbarDropdownKind,
     pub value: String,
 }
+
+/// Marker for the scrollable options list inside a dropdown menu.
+#[derive(Component)]
+pub struct ToolbarDropdownOptionsList(pub ToolbarDropdownKind);
+
+/// Marker for the search bar text node inside a dropdown menu.
+#[derive(Component)]
+pub struct ToolbarDropdownSearchText(pub ToolbarDropdownKind);
 
 /// Marker for split-view toggle button.
 #[derive(Component)]
@@ -176,25 +187,73 @@ fn spawn_dropdown(parent: &mut ChildSpawnerCommands, kind: ToolbarDropdownKind) 
                     ));
                 });
 
-            dropdown.spawn((
-                ToolbarDropdownMenu(kind),
-                Node {
-                    position_type: PositionType::Absolute,
-                    top: Val::Px(24.0),
-                    left: Val::Px(0.0),
-                    width: Val::Percent(100.0),
-                    display: Display::None,
-                    flex_direction: FlexDirection::Column,
-                    border: UiRect::all(Val::Px(1.0)),
-                    max_height: Val::Px(240.0),
-                    overflow: Overflow::clip_y(),
-                    ..default()
-                },
-                BackgroundColor(theme::BG_CONTROL),
-                BorderColor::all(theme::BORDER_SUBTLE),
-                GlobalZIndex(200),
-                ZIndex(20),
-            ));
+            dropdown
+                .spawn((
+                    ToolbarDropdownMenu(kind),
+                    Node {
+                        position_type: PositionType::Absolute,
+                        top: Val::Px(24.0),
+                        left: Val::Px(0.0),
+                        width: Val::Percent(100.0),
+                        display: Display::None,
+                        flex_direction: FlexDirection::Column,
+                        border: UiRect::all(Val::Px(1.0)),
+                        max_height: Val::Px(300.0),
+                        ..default()
+                    },
+                    BackgroundColor(theme::BG_CONTROL),
+                    BorderColor::all(theme::BORDER_SUBTLE),
+                    GlobalZIndex(200),
+                    ZIndex(20),
+                ))
+                .with_children(|menu| {
+                    // Search bar (pinned at top, does not scroll)
+                    menu.spawn((
+                        Node {
+                            width: Val::Percent(100.0),
+                            padding: UiRect::all(Val::Px(4.0)),
+                            border: UiRect::bottom(Val::Px(1.0)),
+                            ..default()
+                        },
+                        BorderColor::all(theme::BORDER_SUBTLE),
+                    ))
+                    .with_children(|search_row| {
+                        search_row
+                            .spawn((
+                                Node {
+                                    width: Val::Percent(100.0),
+                                    padding: UiRect::axes(Val::Px(6.0), Val::Px(3.0)),
+                                    border: UiRect::all(Val::Px(1.0)),
+                                    ..default()
+                                },
+                                BackgroundColor(theme::BG_DARK),
+                                BorderColor::all(theme::BORDER_SUBTLE),
+                            ))
+                            .with_children(|input_box| {
+                                input_box.spawn((
+                                    ToolbarDropdownSearchText(kind),
+                                    Text::new("Search\u{2026}"),
+                                    TextFont {
+                                        font_size: theme::FONT_SIZE_LABEL,
+                                        ..default()
+                                    },
+                                    TextColor(theme::TEXT_DIM),
+                                ));
+                            });
+                    });
+
+                    // Scrollable options list
+                    menu.spawn((
+                        ToolbarDropdownOptionsList(kind),
+                        Node {
+                            width: Val::Percent(100.0),
+                            flex_direction: FlexDirection::Column,
+                            flex_grow: 1.0,
+                            overflow: Overflow::scroll_y(),
+                            ..default()
+                        },
+                    ));
+                });
         });
 }
 
@@ -249,10 +308,12 @@ pub fn handle_toolbar_interactions(
 ) {
     for (interaction, button) in &button_interactions {
         if *interaction == Interaction::Pressed {
-            toolbar_state.active_dropdown = if toolbar_state.active_dropdown == Some(button.0) {
-                None
+            if toolbar_state.active_dropdown == Some(button.0) {
+                toolbar_state.active_dropdown = None;
+                toolbar_state.search_query.clear();
             } else {
-                Some(button.0)
+                toolbar_state.active_dropdown = Some(button.0);
+                toolbar_state.search_query.clear();
             };
         }
     }
@@ -348,17 +409,18 @@ pub fn handle_toolbar_interactions(
         }
 
         toolbar_state.active_dropdown = None;
+        toolbar_state.search_query.clear();
     }
 }
 
-/// (Re)build dropdown menu options.
+/// (Re)build dropdown menu options inside the scrollable options list.
 pub fn rebuild_toolbar_menus(
     mut commands: Commands,
     #[cfg(feature = "ocio")] ocio: Option<Res<OcioColorManagement>>,
-    menus: Query<(Entity, &ToolbarDropdownMenu, Option<&Children>)>,
+    lists: Query<(Entity, &ToolbarDropdownOptionsList, Option<&Children>)>,
 ) {
     let mut needs_initial_build = false;
-    for (_, _, children) in &menus {
+    for (_, _, children) in &lists {
         if children.is_none_or(|c| c.is_empty()) {
             needs_initial_build = true;
             break;
@@ -375,7 +437,7 @@ pub fn rebuild_toolbar_menus(
         return;
     }
 
-    for (menu_entity, menu_kind, children) in &menus {
+    for (list_entity, list_kind, children) in &lists {
         if let Some(children) = children {
             for child in children.iter() {
                 commands.entity(child).despawn();
@@ -383,16 +445,16 @@ pub fn rebuild_toolbar_menus(
         }
 
         #[cfg(not(feature = "ocio"))]
-        let values = dropdown_values(menu_kind.0);
+        let values = dropdown_values(list_kind.0);
 
         #[cfg(feature = "ocio")]
-        let values = dropdown_values(menu_kind.0, ocio.as_deref());
+        let values = dropdown_values(list_kind.0, ocio.as_deref());
 
-        commands.entity(menu_entity).with_children(|menu| {
+        commands.entity(list_entity).with_children(|list| {
             for value in values {
-                menu.spawn((
+                list.spawn((
                     ToolbarDropdownOption {
-                        kind: menu_kind.0,
+                        kind: list_kind.0,
                         value: value.clone(),
                     },
                     Button,
@@ -427,9 +489,10 @@ pub fn sync_toolbar_ui(
     mut ui_parts: ParamSet<(
         Query<(&ToolbarDropdownLabel, &mut Text)>,
         Query<(&ToolbarDropdownMenu, &mut Node)>,
-        Query<(&ToolbarDropdownOption, &mut BackgroundColor)>,
+        Query<(&ToolbarDropdownOption, &mut BackgroundColor, &mut Node)>,
         Query<&mut BackgroundColor, With<SplitViewToggleButton>>,
         Query<&mut BackgroundColor, With<OfxPanelToggleButton>>,
+        Query<(&ToolbarDropdownSearchText, &mut Text, &mut TextColor)>,
     )>,
 ) {
     #[cfg(not(feature = "ocio"))]
@@ -462,7 +525,21 @@ pub fn sync_toolbar_ui(
         };
     }
 
-    for (option, mut bg) in &mut ui_parts.p2() {
+    // Filter options by search query and highlight the selected value.
+    let query_lower = toolbar_state.search_query.to_lowercase();
+    for (option, mut bg, mut node) in &mut ui_parts.p2() {
+        let visible = if toolbar_state.active_dropdown == Some(option.kind) && !query_lower.is_empty()
+        {
+            option.value.to_lowercase().contains(&query_lower)
+        } else {
+            true
+        };
+        node.display = if visible {
+            Display::Flex
+        } else {
+            Display::None
+        };
+
         #[cfg(not(feature = "ocio"))]
         let selected_value = selected_value_for_kind(option.kind, &grading_state);
         #[cfg(feature = "ocio")]
@@ -489,6 +566,18 @@ pub fn sync_toolbar_ui(
         } else {
             BackgroundColor(theme::BG_CONTROL)
         };
+    }
+
+    // Update search bar text display.
+    for (search, mut text, mut color) in &mut ui_parts.p5() {
+        let is_active = toolbar_state.active_dropdown == Some(search.0);
+        if is_active && !toolbar_state.search_query.is_empty() {
+            *text = Text::new(&toolbar_state.search_query);
+            *color = TextColor(theme::TEXT_PRIMARY);
+        } else if is_active {
+            *text = Text::new("Search\u{2026}");
+            *color = TextColor(theme::TEXT_DIM);
+        }
     }
 }
 
@@ -527,6 +616,44 @@ pub fn handle_toolbar_shortcuts(
 
     if keys.just_pressed(KeyCode::KeyP) {
         toolbar_state.ofx_panel_visible = !toolbar_state.ofx_panel_visible;
+    }
+}
+
+/// Handle keyboard input for the dropdown search bar when a dropdown is open.
+pub fn handle_dropdown_search_input(
+    mut keyboard_input: MessageReader<KeyboardInput>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut toolbar_state: ResMut<ToolbarState>,
+) {
+    if toolbar_state.active_dropdown.is_none() {
+        // Drain events even when no dropdown is open so they don't pile up.
+        for _ in keyboard_input.read() {}
+        return;
+    }
+
+    // Don't capture text when Ctrl is held (those are toolbar shortcuts).
+    let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+
+    for event in keyboard_input.read() {
+        if !event.state.is_pressed() || ctrl {
+            continue;
+        }
+
+        match (&event.logical_key, &event.text) {
+            (Key::Backspace, _) => {
+                toolbar_state.search_query.pop();
+            }
+            (Key::Escape, _) => {
+                toolbar_state.active_dropdown = None;
+                toolbar_state.search_query.clear();
+            }
+            (_, Some(inserted)) => {
+                if inserted.chars().all(|c| !c.is_ascii_control()) {
+                    toolbar_state.search_query.push_str(inserted);
+                }
+            }
+            _ => {}
+        }
     }
 }
 

@@ -64,6 +64,7 @@ impl Plugin for CrispenUiPlugin {
                 toolbar::handle_toolbar_interactions,
                 toolbar::handle_toolbar_toggles,
                 toolbar::handle_toolbar_shortcuts,
+                toolbar::handle_dropdown_search_input,
                 toolbar::rebuild_toolbar_menus,
                 toolbar::sync_toolbar_ui,
                 ofx_panel::toggle_ofx_panel,
