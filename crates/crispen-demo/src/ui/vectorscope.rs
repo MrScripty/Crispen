@@ -7,8 +7,9 @@ use bevy::asset::RenderAssetUsages;
 use bevy::picking::Pickable;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
-use crispen_bevy::resources::ScopeState;
-use crispen_core::scopes::{HistogramData, VectorscopeData, WaveformData};
+use crispen_bevy::resources::{GradingState, ScopeState};
+use crispen_core::color_management::{CieChromaticity, chromaticity};
+use crispen_core::scopes::{CieData, HistogramData, VectorscopeData, WaveformData};
 
 use super::theme;
 
@@ -41,6 +42,7 @@ pub enum ScopeViewMode {
     Waveform,
     RgbParade,
     Histogram,
+    CieDiagram,
 }
 
 impl ScopeViewMode {
@@ -50,6 +52,7 @@ impl ScopeViewMode {
             Self::Waveform => "Waveform",
             Self::RgbParade => "RGB Parade",
             Self::Histogram => "Histogram",
+            Self::CieDiagram => "CIE Chromaticity",
         }
     }
 
@@ -59,11 +62,12 @@ impl ScopeViewMode {
             Self::Waveform => "No waveform data",
             Self::RgbParade => "No waveform data for parade",
             Self::Histogram => "No histogram data",
+            Self::CieDiagram => "No CIE data",
         }
     }
 
     fn is_square(self) -> bool {
-        matches!(self, Self::Vectorscope)
+        matches!(self, Self::Vectorscope | Self::CieDiagram)
     }
 }
 
@@ -190,6 +194,8 @@ pub fn spawn_scope_header(parent: &mut ChildSpawnerCommands) {
                             display: Display::None,
                             flex_direction: FlexDirection::Column,
                             border: UiRect::all(Val::Px(1.0)),
+                            max_height: Val::Px(240.0),
+                            overflow: Overflow::scroll_y(),
                             ..default()
                         },
                         BackgroundColor(theme::BG_CONTROL),
@@ -203,6 +209,7 @@ pub fn spawn_scope_header(parent: &mut ChildSpawnerCommands) {
                             ScopeViewMode::Waveform,
                             ScopeViewMode::RgbParade,
                             ScopeViewMode::Histogram,
+                            ScopeViewMode::CieDiagram,
                         ] {
                             menu.spawn((
                                 ScopeDropdownOption(mode),
@@ -375,6 +382,7 @@ pub fn sync_scope_dropdown_ui(
 pub fn update_scope_texture(
     scope_state: Res<ScopeState>,
     view_state: Res<ScopeViewState>,
+    grading_state: Res<GradingState>,
     scope_image: Option<Res<VectorscopeImageHandle>>,
     mut images: ResMut<Assets<Image>>,
     mut ui_parts: ParamSet<(
@@ -383,7 +391,7 @@ pub fn update_scope_texture(
         Query<(&mut Node, &mut Text), With<ScopeHint>>,
     )>,
 ) {
-    if !(scope_state.is_changed() || view_state.is_changed()) {
+    if !(scope_state.is_changed() || view_state.is_changed() || grading_state.is_changed()) {
         return;
     }
 
@@ -413,6 +421,8 @@ pub fn update_scope_texture(
         return;
     };
 
+    let output_gamut = chromaticity(grading_state.params.color_management.output_space);
+
     let rendered = match view_state.mode {
         ScopeViewMode::Vectorscope => scope_state
             .vectorscope
@@ -421,6 +431,10 @@ pub fn update_scope_texture(
         ScopeViewMode::Waveform => scope_state.waveform.as_ref().and_then(render_waveform),
         ScopeViewMode::RgbParade => scope_state.waveform.as_ref().and_then(render_parade),
         ScopeViewMode::Histogram => scope_state.histogram.as_ref().and_then(render_histogram),
+        ScopeViewMode::CieDiagram => scope_state
+            .cie
+            .as_ref()
+            .and_then(|d| render_cie(d, output_gamut)),
     };
 
     if let Some((w, h, rgba)) = rendered {
@@ -479,8 +493,10 @@ fn render_vectorscope(data: &VectorscopeData) -> Option<(u32, u32, Vec<u8>)> {
     let radius = resolution as f32 * 0.5;
     let center = (resolution as f32 - 1.0) * 0.5;
     let line = 1.5 / radius.max(1.0);
+    let skin_line_width = 2.5 / radius.max(1.0);
+    // Skin tone indicator (I-line): 33° from the +Cr axis in the CbCr plane.
     let skin_angle = 33.0_f32.to_radians();
-    let skin_dir = Vec2::new(skin_angle.cos(), -skin_angle.sin());
+    let skin_dir = Vec2::new(-skin_angle.sin(), skin_angle.cos());
 
     let mut rgba = vec![0u8; pixel_count * 4];
     for y in 0..resolution {
@@ -516,11 +532,12 @@ fn render_vectorscope(data: &VectorscopeData) -> Option<(u32, u32, Vec<u8>)> {
                     b += 0.05;
                 }
 
-                let skin_line = (nx * skin_dir.y - ny * skin_dir.x).abs() <= line && dist <= 1.0;
-                if skin_line {
-                    r += 0.08;
-                    g += 0.05;
-                    b += 0.03;
+                let skin_dist = (nx * skin_dir.y - ny * skin_dir.x).abs();
+                if skin_dist <= skin_line_width && dist <= 1.0 {
+                    let blend = 1.0 - (skin_dist / skin_line_width);
+                    r += blend * 0.16;
+                    g += blend * 0.10;
+                    b += blend * 0.03;
                 }
 
                 if d > 0.0 {
@@ -734,4 +751,246 @@ fn render_histogram(data: &HistogramData) -> Option<(u32, u32, Vec<u8>)> {
     }
 
     Some((width, height, rgba))
+}
+
+// ---------------------------------------------------------------------------
+// CIE 1931 chromaticity diagram
+// ---------------------------------------------------------------------------
+
+/// CIE 1931 standard observer spectral locus boundary (xy coordinates).
+///
+/// 81 points from 380 nm to 780 nm at 5 nm intervals, derived from
+/// the CIE 1931 2-degree standard observer color matching functions.
+const SPECTRAL_LOCUS: [[f32; 2]; 81] = [
+    [0.1741, 0.0050], // 380 nm
+    [0.1740, 0.0050],
+    [0.1738, 0.0049],
+    [0.1736, 0.0049],
+    [0.1733, 0.0048],
+    [0.1730, 0.0048], // 405 nm
+    [0.1726, 0.0048],
+    [0.1721, 0.0048],
+    [0.1714, 0.0051],
+    [0.1703, 0.0058],
+    [0.1689, 0.0069], // 430 nm
+    [0.1669, 0.0086],
+    [0.1644, 0.0109],
+    [0.1611, 0.0138],
+    [0.1566, 0.0177],
+    [0.1510, 0.0227], // 455 nm
+    [0.1440, 0.0297],
+    [0.1355, 0.0399],
+    [0.1241, 0.0578],
+    [0.1096, 0.0868],
+    [0.0913, 0.1327], // 480 nm
+    [0.0687, 0.2007],
+    [0.0454, 0.2950],
+    [0.0235, 0.4127],
+    [0.0082, 0.5384],
+    [0.0039, 0.6548], // 505 nm
+    [0.0139, 0.7502],
+    [0.0389, 0.8120],
+    [0.0743, 0.8338],
+    [0.1142, 0.8262],
+    [0.1547, 0.8059], // 530 nm
+    [0.1929, 0.7816],
+    [0.2296, 0.7543],
+    [0.2658, 0.7243],
+    [0.3016, 0.6923],
+    [0.3373, 0.6589], // 555 nm
+    [0.3731, 0.6245],
+    [0.4087, 0.5896],
+    [0.4441, 0.5547],
+    [0.4788, 0.5202],
+    [0.5125, 0.4866], // 580 nm
+    [0.5448, 0.4544],
+    [0.5752, 0.4242],
+    [0.6029, 0.3965],
+    [0.6270, 0.3725],
+    [0.6482, 0.3514], // 605 nm
+    [0.6658, 0.3340],
+    [0.6801, 0.3197],
+    [0.6915, 0.3083],
+    [0.7006, 0.2993],
+    [0.7079, 0.2920], // 630 nm
+    [0.7140, 0.2859],
+    [0.7190, 0.2809],
+    [0.7230, 0.2770],
+    [0.7260, 0.2740],
+    [0.7283, 0.2717], // 655 nm
+    [0.7300, 0.2700],
+    [0.7311, 0.2689],
+    [0.7320, 0.2680],
+    [0.7327, 0.2673],
+    [0.7334, 0.2666], // 680 nm
+    [0.7340, 0.2660],
+    [0.7344, 0.2656],
+    [0.7346, 0.2654],
+    [0.7347, 0.2653],
+    [0.7347, 0.2653], // 705 nm
+    [0.7347, 0.2653],
+    [0.7347, 0.2653],
+    [0.7347, 0.2653],
+    [0.7347, 0.2653],
+    [0.7347, 0.2653], // 730 nm
+    [0.7347, 0.2653],
+    [0.7347, 0.2653],
+    [0.7347, 0.2653],
+    [0.7347, 0.2653],
+    [0.7347, 0.2653], // 755 nm
+    [0.7347, 0.2653],
+    [0.7347, 0.2653],
+    [0.7347, 0.2653],
+    [0.7347, 0.2653],
+    [0.7347, 0.2653], // 780 nm
+];
+
+/// Draw an anti-aliased line segment onto an RGBA buffer.
+///
+/// Uses bilinear sub-pixel blending for smooth rendering.
+fn draw_line(
+    rgba: &mut [u8],
+    resolution: u32,
+    x0: f32,
+    y0: f32,
+    x1: f32,
+    y1: f32,
+    color: [u8; 3],
+) {
+    let dx = (x1 - x0).abs();
+    let dy = (y1 - y0).abs();
+    let step_count = (dx.max(dy) as u32).max(1);
+
+    for i in 0..=step_count {
+        let t = i as f32 / step_count as f32;
+        let px = x0 + (x1 - x0) * t;
+        let py = y0 + (y1 - y0) * t;
+
+        let ix = px.floor() as i32;
+        let iy = py.floor() as i32;
+        let fx = px - ix as f32;
+        let fy = py - iy as f32;
+
+        let weights = [
+            (ix, iy, (1.0 - fx) * (1.0 - fy)),
+            (ix + 1, iy, fx * (1.0 - fy)),
+            (ix, iy + 1, (1.0 - fx) * fy),
+            (ix + 1, iy + 1, fx * fy),
+        ];
+
+        for (wx, wy, weight) in weights {
+            if wx >= 0 && wx < resolution as i32 && wy >= 0 && wy < resolution as i32 {
+                let idx = (wy as u32 * resolution + wx as u32) as usize * 4;
+                let w = weight.clamp(0.0, 1.0);
+                rgba[idx] = rgba[idx].saturating_add((color[0] as f32 * w) as u8);
+                rgba[idx + 1] = rgba[idx + 1].saturating_add((color[1] as f32 * w) as u8);
+                rgba[idx + 2] = rgba[idx + 2].saturating_add((color[2] as f32 * w) as u8);
+            }
+        }
+    }
+}
+
+/// Map CIE xy coordinates to pixel coordinates.
+///
+/// Matches the mapping in `cie::compute()`:
+/// - x range [0, 0.8] maps to [0, resolution-1]
+/// - y range [0, 0.9] maps to [resolution-1, 0] (inverted)
+fn cie_to_pixel(cx: f32, cy: f32, res: f32) -> (f32, f32) {
+    let px = cx / 0.8 * res;
+    let py = (1.0 - cy / 0.9) * res;
+    (px, py)
+}
+
+fn render_cie(data: &CieData, gamut: &CieChromaticity) -> Option<(u32, u32, Vec<u8>)> {
+    let resolution = data.resolution.max(1);
+    let pixel_count = (resolution as usize).saturating_mul(resolution as usize);
+    if data.density.len() < pixel_count {
+        return None;
+    }
+
+    let res_f = (resolution - 1) as f32;
+    let mut rgba = vec![0u8; pixel_count * 4];
+
+    // Dark background fill
+    for px in rgba.chunks_exact_mut(4) {
+        px[0] = 5;
+        px[1] = 5;
+        px[2] = 6;
+        px[3] = 255;
+    }
+
+    // --- Spectral locus outline ---
+    let locus_color: [u8; 3] = [38, 38, 42];
+    for i in 0..SPECTRAL_LOCUS.len() - 1 {
+        let (x0, y0) = cie_to_pixel(SPECTRAL_LOCUS[i][0], SPECTRAL_LOCUS[i][1], res_f);
+        let (x1, y1) = cie_to_pixel(SPECTRAL_LOCUS[i + 1][0], SPECTRAL_LOCUS[i + 1][1], res_f);
+        draw_line(&mut rgba, resolution, x0, y0, x1, y1, locus_color);
+    }
+    // Purple line: connect 780 nm back to 380 nm
+    let last = SPECTRAL_LOCUS.len() - 1;
+    let (x0, y0) = cie_to_pixel(SPECTRAL_LOCUS[last][0], SPECTRAL_LOCUS[last][1], res_f);
+    let (x1, y1) = cie_to_pixel(SPECTRAL_LOCUS[0][0], SPECTRAL_LOCUS[0][1], res_f);
+    draw_line(&mut rgba, resolution, x0, y0, x1, y1, locus_color);
+
+    // --- Output gamut triangle ---
+    let triangle_color: [u8; 3] = [70, 75, 80];
+    let primaries = [
+        [gamut.r[0] as f32, gamut.r[1] as f32],
+        [gamut.g[0] as f32, gamut.g[1] as f32],
+        [gamut.b[0] as f32, gamut.b[1] as f32],
+    ];
+    for i in 0..3 {
+        let j = (i + 1) % 3;
+        let (x0, y0) = cie_to_pixel(primaries[i][0], primaries[i][1], res_f);
+        let (x1, y1) = cie_to_pixel(primaries[j][0], primaries[j][1], res_f);
+        draw_line(&mut rgba, resolution, x0, y0, x1, y1, triangle_color);
+    }
+
+    // --- White point cross ---
+    let wp = [gamut.w[0] as f32, gamut.w[1] as f32];
+    let (wpx, wpy) = cie_to_pixel(wp[0], wp[1], res_f);
+    let cross_size = res_f * 0.015;
+    let wp_color: [u8; 3] = [90, 90, 95];
+    draw_line(
+        &mut rgba,
+        resolution,
+        wpx - cross_size,
+        wpy,
+        wpx + cross_size,
+        wpy,
+        wp_color,
+    );
+    draw_line(
+        &mut rgba,
+        resolution,
+        wpx,
+        wpy - cross_size,
+        wpx,
+        wpy + cross_size,
+        wp_color,
+    );
+
+    // --- Pixel density overlay ---
+    let peak = data.density.iter().copied().max().unwrap_or(0) as f32;
+    if peak > 0.0 {
+        let log_peak = (peak + 1.0).ln().max(1.0);
+
+        for y in 0..resolution {
+            for x in 0..resolution {
+                let idx = (y * resolution + x) as usize;
+                let d = data.density[idx] as f32;
+                if d <= 0.0 {
+                    continue;
+                }
+
+                let signal = ((d + 1.0).ln() / log_peak).clamp(0.0, 1.0).powf(0.65);
+                let base = idx * 4;
+                rgba[base] = rgba[base].saturating_add((signal * 0.42 * 255.0) as u8);
+                rgba[base + 1] = rgba[base + 1].saturating_add((signal * 0.90 * 255.0) as u8);
+                rgba[base + 2] = rgba[base + 2].saturating_add((signal * 0.52 * 255.0) as u8);
+            }
+        }
+    }
+
+    Some((resolution, resolution, rgba))
 }
