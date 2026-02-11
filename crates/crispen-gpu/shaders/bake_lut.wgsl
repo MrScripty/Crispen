@@ -19,9 +19,9 @@ struct GradingParamsGpu {
     input_space: u32,
     working_space: u32,
     output_space: u32,
+    display_oetf: u32,
     _pad0: u32,
     _pad1: u32,
-    _pad2: u32,
 };
 
 @group(0) @binding(0) var lut_data: texture_storage_3d<rgba32float, write>;
@@ -235,6 +235,48 @@ fn linear_to_acescct(v: f32) -> f32 {
     return (log2(v) + 9.72) / 17.52;
 }
 
+// PQ (SMPTE ST.2084) EOTF — display-encoded → linear.
+fn pq_to_linear(v: f32) -> f32 {
+    let m1 = 0.1593017578125;
+    let m2 = 78.84375;
+    let c1 = 0.8359375;
+    let c2 = 18.8515625;
+    let c3 = 18.6875;
+    let vp = pow(max(v, 0.0), 1.0 / m2);
+    return pow(max(vp - c1, 0.0) / (c2 - c3 * vp), 1.0 / m1);
+}
+
+// HLG (Hybrid Log-Gamma) OETF inverse — display-encoded → linear.
+fn hlg_to_linear(v: f32) -> f32 {
+    let a = 0.17883277;
+    let b = 0.28466892;
+    let c_hlg = 0.55991073;
+    if (v <= 0.5) {
+        return v * v / 3.0;
+    }
+    return (exp((v - c_hlg) / a) + b) / 12.0;
+}
+
+// ── Inverse display OETF ────────────────────────────────────────────
+// After the OCIO ODT, the output is display-encoded (includes OETF).
+// We must undo this so the pipeline outputs linear values for Bevy's
+// sRGB framebuffer to re-apply the correct display encoding.
+
+fn inverse_display_oetf(v: vec3<f32>) -> vec3<f32> {
+    switch (params.display_oetf) {
+        case 1u: {
+            return vec3<f32>(srgb_to_linear(v.x), srgb_to_linear(v.y), srgb_to_linear(v.z));
+        }
+        case 2u: {
+            return vec3<f32>(pq_to_linear(v.x), pq_to_linear(v.y), pq_to_linear(v.z));
+        }
+        case 3u: {
+            return vec3<f32>(hlg_to_linear(v.x), hlg_to_linear(v.y), hlg_to_linear(v.z));
+        }
+        default: { return v; } // 0 = Linear — already linear, no inverse needed.
+    }
+}
+
 // ── Linearize / encode per color space ──────────────────────────────
 
 fn linearize_channel(v: f32, space: u32) -> f32 {
@@ -317,14 +359,19 @@ fn input_transform(v: vec3<f32>, from_space: u32, to_space: u32) -> vec3<f32> {
 fn output_transform(v: vec3<f32>, from_space: u32, to_space: u32) -> vec3<f32> {
     if (params.use_ocio == 1u) {
         let clamped = clamp(v, vec3(0.0), vec3(1.0));
-        return textureSampleLevel(ocio_odt_lut, ocio_sampler, clamped, 0.0).rgb;
+        let display = textureSampleLevel(ocio_odt_lut, ocio_sampler, clamped, 0.0).rgb;
+        // OCIO ODT output is display-encoded (includes OETF). Undo it so the
+        // pipeline outputs linear values — Bevy's sRGB framebuffer re-applies.
+        return inverse_display_oetf(display);
     }
+    // Native path: gamut conversion only, always output linear.
+    // Bevy's sRGB framebuffer handles the display OETF.
     var out = v;
     if (from_space != to_space) {
         let xyz = gamut_to_xyz(out, from_space);
         out = xyz_to_gamut(xyz, to_space);
     }
-    return encode(out, to_space);
+    return out;
 }
 
 // ── White balance (simplified Planckian shift via Bradford) ──────────

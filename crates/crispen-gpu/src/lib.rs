@@ -58,9 +58,10 @@ pub struct GradingParamsGpu {
 
     // Scalar group 4 (16 bytes)
     pub output_space: u32,
+    /// Display OETF to invert after OCIO ODT (0=Linear, 1=sRGB, 2=PQ, 3=HLG).
+    pub display_oetf: u32,
     pub _pad0: u32,
     pub _pad1: u32,
-    pub _pad2: u32,
 }
 
 impl GradingParamsGpu {
@@ -84,9 +85,9 @@ impl GradingParamsGpu {
             input_space: color_space_to_u32(&params.color_management.input_space),
             working_space: color_space_to_u32(&params.color_management.working_space),
             output_space: color_space_to_u32(&params.color_management.output_space),
+            display_oetf: params.color_management.display_oetf.to_u32(),
             _pad0: 0,
             _pad1: 0,
-            _pad2: 0,
         }
     }
 }
