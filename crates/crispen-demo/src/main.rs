@@ -121,6 +121,8 @@ fn try_insert_ocio_resource(app: &mut App) {
         .role("scene_linear")
         .unwrap_or_else(|| "ACEScg".to_string());
 
+    let display_oetf = infer_display_oetf(&display);
+
     app.insert_resource(OcioColorManagement {
         config,
         input_space: "sRGB - Texture".to_string(),
@@ -129,9 +131,25 @@ fn try_insert_ocio_resource(app: &mut App) {
         view,
         idt_lut: None,
         odt_lut: None,
+        display_oetf,
         dirty: true,
     });
     tracing::info!("OCIO enabled");
+}
+
+/// Infer the display OETF from the OCIO display name.
+#[cfg(feature = "ocio")]
+fn infer_display_oetf(display_name: &str) -> crispen_core::transform::params::DisplayOetf {
+    use crispen_core::transform::params::DisplayOetf;
+    let lower = display_name.to_ascii_lowercase();
+    if lower.contains("pq") || lower.contains("st.2084") || lower.contains("st2084") {
+        DisplayOetf::Pq
+    } else if lower.contains("hlg") {
+        DisplayOetf::Hlg
+    } else {
+        // sRGB, P3, Rec.709, and most SDR displays use the sRGB OETF.
+        DisplayOetf::Srgb
+    }
 }
 
 /// Send initial state to the UI when the app starts.

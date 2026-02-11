@@ -3,6 +3,7 @@
 use std::path::Path;
 
 use crispen_core::image::{BitDepth, GradingImage};
+use crispen_core::transform::params::ColorSpaceId;
 use image::imageops::FilterType;
 
 /// Result of loading an image, including optional detected color space.
@@ -175,6 +176,72 @@ fn maybe_resize_grading_image(
         height: dst_h,
         pixels: dst_pixels,
         source_bit_depth: image.source_bit_depth,
+    }
+}
+
+/// Map an OIIO-detected color space string to a [`ColorSpaceId`].
+///
+/// Falls back to inferring from bit depth when the string is unrecognised.
+pub fn detected_color_space_to_id(
+    name: Option<&str>,
+    bit_depth: BitDepth,
+) -> ColorSpaceId {
+    if let Some(name) = name {
+        let lower = name.to_ascii_lowercase();
+        // Match common OIIO / OCIO color space names.
+        if lower == "srgb" || lower.contains("srgb") && !lower.contains("linear") {
+            return ColorSpaceId::Srgb;
+        }
+        if lower.contains("linear") && (lower.contains("srgb") || lower.contains("709")) {
+            return ColorSpaceId::LinearSrgb;
+        }
+        if lower.contains("acescg") {
+            return ColorSpaceId::AcesCg;
+        }
+        if lower.contains("aces2065") || lower == "aces" {
+            return ColorSpaceId::Aces2065_1;
+        }
+        if lower.contains("acescc") && !lower.contains("acescct") {
+            return ColorSpaceId::AcesCc;
+        }
+        if lower.contains("acescct") {
+            return ColorSpaceId::AcesCct;
+        }
+        if lower.contains("logc3") || lower.contains("logc ei") {
+            return ColorSpaceId::ArriLogC3;
+        }
+        if lower.contains("logc4") {
+            return ColorSpaceId::ArriLogC4;
+        }
+        if lower.contains("slog3") || lower.contains("s-log3") {
+            return ColorSpaceId::SLog3;
+        }
+        if lower.contains("log3g10") || lower.contains("redlog") {
+            return ColorSpaceId::RedLog3G10;
+        }
+        if lower.contains("vlog") || lower.contains("v-log") {
+            return ColorSpaceId::VLog;
+        }
+        if lower.contains("rec2020") || lower.contains("rec.2020") || lower.contains("bt.2020") {
+            return ColorSpaceId::Rec2020;
+        }
+        if lower.contains("p3") {
+            return ColorSpaceId::DciP3;
+        }
+    }
+
+    // Fallback: infer from bit depth.
+    infer_input_space_from_bit_depth(bit_depth)
+}
+
+/// Infer a reasonable input color space from the source bit depth.
+///
+/// Standard 8/16-bit images (JPEG, PNG, etc.) are almost always sRGB-encoded.
+/// Float images (EXR, HDR) are typically linear scene-referred.
+pub fn infer_input_space_from_bit_depth(bit_depth: BitDepth) -> ColorSpaceId {
+    match bit_depth {
+        BitDepth::U8 | BitDepth::U10 | BitDepth::U12 | BitDepth::U16 => ColorSpaceId::Srgb,
+        BitDepth::F16 | BitDepth::F32 => ColorSpaceId::LinearSrgb,
     }
 }
 

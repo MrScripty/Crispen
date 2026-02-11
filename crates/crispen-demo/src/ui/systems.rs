@@ -238,18 +238,28 @@ fn load_image_from_path(
 
     let image = loaded.image;
 
+    // Auto-detect input color space from OIIO metadata or bit depth.
+    let detected_input_space = image_loader::detected_color_space_to_id(
+        loaded.detected_color_space.as_deref(),
+        image.source_bit_depth,
+    );
+
     tracing::info!(
-        "Loaded image: {}x{} {:?} from {} (color space: {:?})",
+        "Loaded image: {}x{} {:?} from {} (color space: {:?}, input: {})",
         image.width,
         image.height,
         image.source_bit_depth,
         path.display(),
         loaded.detected_color_space,
+        detected_input_space.label(),
     );
 
     let width = image.width;
     let height = image.height;
     let bit_depth = format!("{:?}", image.source_bit_depth);
+
+    // Update input space to match the actual source encoding.
+    grading_state.params.color_management.input_space = detected_input_space;
 
     // Upload to GPU if the pipeline is available.
     if let Some(mut gpu) = gpu {
@@ -267,9 +277,10 @@ fn load_image_from_path(
         if let Some(ref cs) = loaded.detected_color_space {
             ocio.input_space = cs.clone();
         } else {
-            let detected_space = grading_state.params.color_management.input_space;
-            ocio.input_space =
-                crate::ocio_support::map_detected_to_ocio_name(detected_space, &ocio.config);
+            ocio.input_space = crate::ocio_support::map_detected_to_ocio_name(
+                detected_input_space,
+                &ocio.config,
+            );
         }
         ocio.dirty = true;
     }
