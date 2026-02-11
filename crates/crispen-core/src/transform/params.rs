@@ -80,6 +80,35 @@ impl ColorSpaceId {
     }
 }
 
+/// Identifies the display's electro-optical transfer function (OETF).
+///
+/// When the GPU pipeline outputs display-referred values (e.g. after an OCIO
+/// ODT), the OETF encoding must be inverted so that Bevy's sRGB framebuffer
+/// can re-apply the correct encoding for the monitor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DisplayOetf {
+    /// Output is already linear — no inverse needed.
+    Linear,
+    /// sRGB / Display P3 SDR (most common).
+    Srgb,
+    /// PQ (SMPTE ST.2084) for HDR displays.
+    Pq,
+    /// Hybrid Log-Gamma for broadcast HDR.
+    Hlg,
+}
+
+impl DisplayOetf {
+    /// GPU-compatible integer for the shader uniform.
+    pub const fn to_u32(self) -> u32 {
+        match self {
+            Self::Linear => 0,
+            Self::Srgb => 1,
+            Self::Pq => 2,
+            Self::Hlg => 3,
+        }
+    }
+}
+
 /// Configuration for color space transforms in the grading pipeline.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ColorManagementConfig {
@@ -87,16 +116,20 @@ pub struct ColorManagementConfig {
     pub input_space: ColorSpaceId,
     /// Working color space for grading operations.
     pub working_space: ColorSpaceId,
-    /// Output color space for display/export.
+    /// Output color space (gamut) for display. The shader outputs linear
+    /// values in this gamut; Bevy's sRGB framebuffer applies the final OETF.
     pub output_space: ColorSpaceId,
+    /// Display OETF to invert when using OCIO ODT output.
+    pub display_oetf: DisplayOetf,
 }
 
 impl Default for ColorManagementConfig {
     fn default() -> Self {
         Self {
-            input_space: ColorSpaceId::LinearSrgb,
+            input_space: ColorSpaceId::Srgb,
             working_space: ColorSpaceId::AcesCg,
-            output_space: ColorSpaceId::Srgb,
+            output_space: ColorSpaceId::LinearSrgb,
+            display_oetf: DisplayOetf::Srgb,
         }
     }
 }
