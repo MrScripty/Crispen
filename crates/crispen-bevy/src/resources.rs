@@ -49,6 +49,8 @@ pub struct OcioColorManagement {
     pub view: String,
     pub idt_lut: Option<Vec<[f32; 4]>>,
     pub odt_lut: Option<Vec<[f32; 4]>>,
+    /// The display OETF that the OCIO ODT applies, so the shader can invert it.
+    pub display_oetf: crispen_core::transform::params::DisplayOetf,
     pub dirty: bool,
 }
 

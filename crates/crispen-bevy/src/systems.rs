@@ -208,6 +208,9 @@ pub fn submit_gpu_work(
         if let Some(ocio) = ocio.as_ref() {
             gpu.pipeline
                 .set_ocio_luts(ocio.idt_lut.as_deref(), ocio.odt_lut.as_deref(), 65);
+            // Sync the OCIO display OETF into the grading params so the shader
+            // knows which inverse OETF to apply after the ODT.
+            state.params.color_management.display_oetf = ocio.display_oetf;
         } else {
             gpu.pipeline.set_ocio_luts(None, None, 65);
         }
