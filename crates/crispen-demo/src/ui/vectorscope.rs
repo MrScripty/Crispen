@@ -5,12 +5,15 @@
 
 use bevy::asset::RenderAssetUsages;
 use bevy::picking::Pickable;
+use bevy::picking::events::Click;
+use bevy::picking::pointer::PointerButton;
 use bevy::prelude::*;
 use bevy::render::render_resource::{Extent3d, TextureDimension, TextureFormat};
 use crispen_bevy::resources::{GradingState, ScopeState};
 use crispen_core::color_management::{CieChromaticity, chromaticity};
 use crispen_core::scopes::{CieData, HistogramData, VectorscopeData, WaveformData};
 
+use super::scope_mask;
 use super::theme;
 
 /// Handle to the dynamic Bevy image used for scope rendering.
@@ -83,6 +86,10 @@ pub(crate) struct ScopePlotArea;
 #[derive(Component)]
 pub(crate) struct ScopeHint;
 
+/// Marker for CIE gamut label overlay (shows output colorspace name).
+#[derive(Component)]
+pub(crate) struct CieGamutLabel;
+
 /// Dropdown toggle button.
 #[derive(Component)]
 pub(crate) struct ScopeDropdownButton;
@@ -139,6 +146,18 @@ pub fn spawn_scope_header(parent: &mut ChildSpawnerCommands) {
                 TextColor(theme::TEXT_PRIMARY),
             ));
 
+            // Mask toggle + clear buttons.
+            row.spawn(Node {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Row,
+                column_gap: Val::Px(4.0),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|mask_row| {
+                scope_mask::spawn_mask_buttons(mask_row);
+            });
+
             row.spawn(Node {
                 position_type: PositionType::Relative,
                 width: Val::Px(136.0),
@@ -172,6 +191,7 @@ pub fn spawn_scope_header(parent: &mut ChildSpawnerCommands) {
                                 ..default()
                             },
                             TextColor(theme::TEXT_PRIMARY),
+                            Pickable::IGNORE,
                         ));
                         button.spawn((
                             Text::new("v"),
@@ -180,6 +200,7 @@ pub fn spawn_scope_header(parent: &mut ChildSpawnerCommands) {
                                 ..default()
                             },
                             TextColor(theme::TEXT_DIM),
+                            Pickable::IGNORE,
                         ));
                     });
 
@@ -313,6 +334,24 @@ pub fn spawn_vectorscope_panel(parent: &mut ChildSpawnerCommands, handle: Handle
                             TextColor(theme::TEXT_DIM),
                             Pickable::IGNORE,
                         ));
+
+                        frame.spawn((
+                            CieGamutLabel,
+                            Node {
+                                position_type: PositionType::Absolute,
+                                bottom: Val::Px(4.0),
+                                left: Val::Px(6.0),
+                                display: Display::None,
+                                ..default()
+                            },
+                            Text::new(""),
+                            TextFont {
+                                font_size: 11.0,
+                                ..default()
+                            },
+                            TextColor(theme::TEXT_DIM),
+                            Pickable::IGNORE,
+                        ));
                     });
                 });
         });
@@ -340,6 +379,22 @@ pub fn handle_scope_dropdown_interactions(
             state.dropdown_open = false;
         }
     }
+}
+
+/// Observer: handle clicks on scope dropdown option entities via the picking system.
+pub fn on_scope_option_click(
+    ev: On<Pointer<Click>>,
+    options: Query<&ScopeDropdownOption>,
+    mut state: ResMut<ScopeViewState>,
+) {
+    if ev.button != PointerButton::Primary {
+        return;
+    }
+    let Ok(option) = options.get(ev.entity) else {
+        return;
+    };
+    state.mode = option.0;
+    state.dropdown_open = false;
 }
 
 /// Keep dropdown label/menu visuals in sync with [`ScopeViewState`].
@@ -389,6 +444,7 @@ pub fn update_scope_texture(
         Query<&mut Node, With<ScopePlotArea>>,
         Query<&mut Node, With<ScopeImageFrame>>,
         Query<(&mut Node, &mut Text), With<ScopeHint>>,
+        Query<(&mut Node, &mut Text), With<CieGamutLabel>>,
     )>,
 ) {
     if !(scope_state.is_changed() || view_state.is_changed() || grading_state.is_changed()) {
@@ -446,6 +502,18 @@ pub fn update_scope_texture(
         for (mut node, mut text) in ui_parts.p2().iter_mut() {
             node.display = Display::Flex;
             *text = Text::new(view_state.mode.missing_text());
+        }
+    }
+
+    // Show output colorspace label on CIE diagram.
+    let is_cie = view_state.mode == ScopeViewMode::CieDiagram;
+    for (mut node, mut text) in ui_parts.p3().iter_mut() {
+        if is_cie {
+            node.display = Display::Flex;
+            let label = grading_state.params.color_management.output_space.label();
+            *text = Text::new(label);
+        } else {
+            node.display = Display::None;
         }
     }
 }
@@ -848,15 +916,7 @@ const SPECTRAL_LOCUS: [[f32; 2]; 81] = [
 /// Draw an anti-aliased line segment onto an RGBA buffer.
 ///
 /// Uses bilinear sub-pixel blending for smooth rendering.
-fn draw_line(
-    rgba: &mut [u8],
-    resolution: u32,
-    x0: f32,
-    y0: f32,
-    x1: f32,
-    y1: f32,
-    color: [u8; 3],
-) {
+fn draw_line(rgba: &mut [u8], resolution: u32, x0: f32, y0: f32, x1: f32, y1: f32, color: [u8; 3]) {
     let dx = (x1 - x0).abs();
     let dy = (y1 - y0).abs();
     let step_count = (dx.max(dy) as u32).max(1);
