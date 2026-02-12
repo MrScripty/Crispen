@@ -2,6 +2,8 @@
 
 use std::num::NonZeroU64;
 
+use wgpu::util::DeviceExt;
+
 use crate::buffers::{GpuImageHandle, ScopeBuffers};
 
 /// Dispatches scope compute shaders and manages their pipeline state.
@@ -21,6 +23,10 @@ pub struct ScopeDispatch {
     wf_waveform_height_buf: wgpu::Buffer,
     vs_resolution_buf: wgpu::Buffer,
     cie_resolution_buf: wgpu::Buffer,
+    // Scope mask: per-pixel u32 buffer + active flag uniform.
+    mask_buf: wgpu::Buffer,
+    mask_active_buf: wgpu::Buffer,
+    mask_pixel_count: u32,
 }
 
 impl ScopeDispatch {
@@ -34,6 +40,8 @@ impl ScopeDispatch {
                 storage_ro_entry(0),
                 storage_rw_entry(1),
                 uniform_entry(2, 4),
+                storage_ro_entry(3), // mask
+                uniform_entry(4, 4), // mask_active
             ],
         );
 
@@ -47,6 +55,8 @@ impl ScopeDispatch {
                 uniform_entry(2, 4),
                 uniform_entry(3, 4),
                 uniform_entry(4, 4),
+                storage_ro_entry(5), // mask
+                uniform_entry(6, 4), // mask_active
             ],
         );
 
@@ -59,6 +69,8 @@ impl ScopeDispatch {
                 storage_rw_entry(1),
                 uniform_entry(2, 4),
                 uniform_entry(3, 4),
+                storage_ro_entry(4), // mask
+                uniform_entry(5, 4), // mask_active
             ],
         );
 
@@ -71,6 +83,8 @@ impl ScopeDispatch {
                 storage_rw_entry(1),
                 uniform_entry(2, 4),
                 uniform_entry(3, 4),
+                storage_ro_entry(4), // mask
+                uniform_entry(5, 4), // mask_active
             ],
         );
 
@@ -83,6 +97,15 @@ impl ScopeDispatch {
                 mapped_at_creation: false,
             })
         };
+
+        // Placeholder mask buffer (4 u32s = 16 bytes, minimum for storage binding).
+        let mask_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("crispen_scope_mask_placeholder"),
+            contents: bytemuck::cast_slice(&[1u32; 4]),
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let mask_active_buf = make_uniform("crispen_scope_mask_active");
 
         Self {
             histogram_pipeline,
@@ -99,7 +122,42 @@ impl ScopeDispatch {
             wf_waveform_height_buf: make_uniform("crispen_scope_wf_wh"),
             vs_resolution_buf: make_uniform("crispen_scope_vs_res"),
             cie_resolution_buf: make_uniform("crispen_scope_cie_res"),
+            mask_buf,
+            mask_active_buf,
+            mask_pixel_count: 0,
         }
+    }
+
+    /// Upload a per-pixel scope mask. Each element is 1 (include) or 0 (exclude).
+    /// The mask length must match the image pixel count.
+    pub fn update_mask(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, mask: &[u32]) {
+        let needed = mask.len() as u32;
+        if needed != self.mask_pixel_count || self.mask_buf.size() < (mask.len() * 4) as u64 {
+            self.mask_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("crispen_scope_mask"),
+                contents: bytemuck::cast_slice(mask),
+                usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            });
+            self.mask_pixel_count = needed;
+        } else {
+            queue.write_buffer(&self.mask_buf, 0, bytemuck::cast_slice(mask));
+        }
+        let pad = |v: u32| -> [u32; 4] { [v, 0, 0, 0] };
+        queue.write_buffer(
+            &self.mask_active_buf,
+            0,
+            bytemuck::cast_slice(&pad(1)),
+        );
+    }
+
+    /// Clear the scope mask so all pixels are included.
+    pub fn clear_mask(&self, queue: &wgpu::Queue) {
+        let pad = |v: u32| -> [u32; 4] { [v, 0, 0, 0] };
+        queue.write_buffer(
+            &self.mask_active_buf,
+            0,
+            bytemuck::cast_slice(&pad(0)),
+        );
     }
 
     /// Dispatch all scope shaders onto the given encoder.
@@ -176,6 +234,14 @@ impl ScopeDispatch {
                     binding: 2,
                     resource: self.pixel_count_buf.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: self.mask_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: self.mask_active_buf.as_entire_binding(),
+                },
             ],
         });
         {
@@ -213,6 +279,14 @@ impl ScopeDispatch {
                     binding: 4,
                     resource: self.wf_waveform_height_buf.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: self.mask_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 6,
+                    resource: self.mask_active_buf.as_entire_binding(),
+                },
             ],
         });
         {
@@ -246,6 +320,14 @@ impl ScopeDispatch {
                     binding: 3,
                     resource: self.vs_resolution_buf.as_entire_binding(),
                 },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: self.mask_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: self.mask_active_buf.as_entire_binding(),
+                },
             ],
         });
         {
@@ -278,6 +360,14 @@ impl ScopeDispatch {
                 wgpu::BindGroupEntry {
                     binding: 3,
                     resource: self.cie_resolution_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: self.mask_buf.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: self.mask_active_buf.as_entire_binding(),
                 },
             ],
         });

@@ -6,11 +6,14 @@
 @group(0) @binding(2) var<uniform> image_width: u32;
 @group(0) @binding(3) var<uniform> image_height: u32;
 @group(0) @binding(4) var<uniform> waveform_height: u32;
+@group(0) @binding(5) var<storage, read> mask: array<u32>;
+@group(0) @binding(6) var<uniform> mask_active: u32;
 
 @compute @workgroup_size(256, 1, 1)
 fn waveform_compute(@builtin(global_invocation_id) gid: vec3<u32>) {
     let total_pixels = image_width * image_height;
     if (gid.x >= total_pixels) { return; }
+    if (mask_active != 0u && mask[gid.x] == 0u) { return; }
 
     let x = gid.x % image_width;
     let pixel = pixels[gid.x];

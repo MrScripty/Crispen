@@ -614,4 +614,15 @@ impl GpuGradingPipeline {
             .as_ref()
             .is_some_and(|rb| rb.has_pending())
     }
+
+    /// Upload a per-pixel scope mask. Pixels with mask=0 are excluded from scope analysis.
+    pub fn set_scope_mask(&mut self, mask: &[u32]) {
+        self.scope_dispatch
+            .update_mask(&self.device, &self.queue, mask);
+    }
+
+    /// Clear the scope mask so all pixels are included in scope analysis.
+    pub fn clear_scope_mask(&mut self) {
+        self.scope_dispatch.clear_mask(&self.queue);
+    }
 }

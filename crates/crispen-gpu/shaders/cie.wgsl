@@ -4,6 +4,8 @@
 @group(0) @binding(1) var<storage, read_write> density: array<atomic<u32>>;
 @group(0) @binding(2) var<uniform> pixel_count: u32;
 @group(0) @binding(3) var<uniform> resolution: u32;
+@group(0) @binding(4) var<storage, read> mask: array<u32>;
+@group(0) @binding(5) var<uniform> mask_active: u32;
 
 // sRGB to XYZ matrix rows.
 const TO_XYZ_0: vec3<f32> = vec3<f32>(0.4124564, 0.3575761, 0.1804375);
@@ -13,6 +15,7 @@ const TO_XYZ_2: vec3<f32> = vec3<f32>(0.0193339, 0.1191920, 0.9503041);
 @compute @workgroup_size(256, 1, 1)
 fn cie_compute(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (gid.x >= pixel_count) { return; }
+    if (mask_active != 0u && mask[gid.x] == 0u) { return; }
 
     let pixel = pixels[gid.x];
     let x_val = dot(TO_XYZ_0, pixel.xyz);

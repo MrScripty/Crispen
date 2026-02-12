@@ -4,10 +4,13 @@
 @group(0) @binding(1) var<storage, read_write> density: array<atomic<u32>>;
 @group(0) @binding(2) var<uniform> pixel_count: u32;
 @group(0) @binding(3) var<uniform> resolution: u32;
+@group(0) @binding(4) var<storage, read> mask: array<u32>;
+@group(0) @binding(5) var<uniform> mask_active: u32;
 
 @compute @workgroup_size(256, 1, 1)
 fn vectorscope(@builtin(global_invocation_id) gid: vec3<u32>) {
     if (gid.x >= pixel_count) { return; }
+    if (mask_active != 0u && mask[gid.x] == 0u) { return; }
 
     let pixel = pixels[gid.x];
     // BT.709 luma

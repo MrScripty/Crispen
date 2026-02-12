@@ -3,6 +3,8 @@
 @group(0) @binding(0) var<storage, read> pixels: array<vec4<f32>>;
 @group(0) @binding(1) var<storage, read_write> bins: array<atomic<u32>>;
 @group(0) @binding(2) var<uniform> pixel_count: u32;
+@group(0) @binding(3) var<storage, read> mask: array<u32>;
+@group(0) @binding(4) var<uniform> mask_active: u32;
 
 // Layout: bins[0..255] = R, bins[256..511] = G, bins[512..767] = B, bins[768..1023] = Luma.
 var<workgroup> local_bins: array<atomic<u32>, 1024>;
@@ -22,6 +24,9 @@ fn histogram(
 
     let thread_id = gid.x;
     if (thread_id < pixel_count) {
+        if (mask_active != 0u && mask[thread_id] == 0u) {
+            // Skip pixels outside the scope mask.
+        } else {
         let pixel = pixels[thread_id];
         let r_bin = min(u32(clamp(pixel.x, 0.0, 1.0) * 255.0), 255u);
         let g_bin = min(u32(clamp(pixel.y, 0.0, 1.0) * 255.0), 255u);
@@ -33,6 +38,7 @@ fn histogram(
         atomicAdd(&local_bins[256u + g_bin], 1u);
         atomicAdd(&local_bins[512u + b_bin], 1u);
         atomicAdd(&local_bins[768u + l_bin], 1u);
+        }
     }
 
     workgroupBarrier();
