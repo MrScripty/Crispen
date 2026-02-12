@@ -27,6 +27,15 @@
 
   // Transient UI state (local only)
   let error = $state<string | null>(null);
+  let imagePath = $state('');
+
+  function loadImageFromPath() {
+    const path = imagePath.trim();
+    if (!path) {
+      return;
+    }
+    bridge.loadImage(path);
+  }
 
   onMount(() => {
     const unsubscribe = bridge.subscribe((msg) => {
@@ -59,6 +68,18 @@
     <div class="toolbar-actions">
       <button onclick={() => bridge.autoBalance()}>Auto Balance</button>
       <button onclick={() => bridge.resetGrade()}>Reset</button>
+      <input
+        class="path-input"
+        type="text"
+        placeholder="Image path..."
+        bind:value={imagePath}
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            loadImageFromPath();
+          }
+        }}
+      />
+      <button onclick={loadImageFromPath}>Load Image</button>
     </div>
     {#if imageInfo}
       <span class="image-info">
@@ -130,6 +151,17 @@
     border-radius: 4px;
     color: #e0e0e0;
     cursor: pointer;
+    font-size: 12px;
+  }
+
+  .toolbar-actions .path-input {
+    width: 360px;
+    max-width: 40vw;
+    padding: 4px 8px;
+    background: #1e1e1e;
+    border: 1px solid #555;
+    border-radius: 4px;
+    color: #e0e0e0;
     font-size: 12px;
   }
 

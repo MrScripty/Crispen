@@ -39,6 +39,7 @@ class CrispenBridge {
         this.ws?.send(msg);
       }
       this.pendingMessages = [];
+      this.send({ type: 'RequestState' });
     };
 
     this.ws.onmessage = (event: MessageEvent) => {

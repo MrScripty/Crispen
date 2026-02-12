@@ -77,6 +77,7 @@ export type BevyToUi =
   | { type: 'Error'; data: { message: string } };
 
 export type UiToBevy =
+  | { type: 'RequestState' }
   | { type: 'SetParams'; data: { params: GradingParams } }
   | { type: 'AutoBalance' }
   | { type: 'ResetGrade' }
