@@ -9,6 +9,25 @@ const DEFAULT_WIDTH: f32 = 1920.0;
 /// Default window height.
 const DEFAULT_HEIGHT: f32 = 1080.0;
 
+/// Runtime frontend mode.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FrontendMode {
+    /// Use the external Svelte UI (WebSocket bridge).
+    Svelte,
+    /// Use the legacy native Bevy UI.
+    BevyNative,
+}
+
+impl FrontendMode {
+    fn from_env() -> Self {
+        let raw = std::env::var("CRISPEN_FRONTEND").unwrap_or_else(|_| "svelte".to_string());
+        match raw.trim().to_ascii_lowercase().as_str() {
+            "bevy" | "native" | "native_bevy" => Self::BevyNative,
+            _ => Self::Svelte,
+        }
+    }
+}
+
 /// Runtime configuration for the Crispen demo application.
 #[derive(Resource, Clone)]
 pub struct AppConfig {
@@ -20,6 +39,8 @@ pub struct AppConfig {
     pub height: f32,
     /// Whether to use the Vite dev server for the UI.
     pub dev_mode: bool,
+    /// Which frontend stack to run.
+    pub frontend_mode: FrontendMode,
 }
 
 impl Default for AppConfig {
@@ -32,6 +53,7 @@ impl Default for AppConfig {
             width: DEFAULT_WIDTH,
             height: DEFAULT_HEIGHT,
             dev_mode: std::env::var("CRISPEN_DEV").is_ok(),
+            frontend_mode: FrontendMode::from_env(),
         }
     }
 }

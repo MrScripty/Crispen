@@ -14,7 +14,7 @@ use bevy::input_focus::InputDispatchPlugin;
 use bevy::prelude::*;
 use bevy::window::WindowResolution;
 
-use config::AppConfig;
+use config::{AppConfig, FrontendMode};
 use crispen_bevy::CrispenPlugin;
 use crispen_bevy::events::{ParamsUpdatedEvent, ScopeDataReadyEvent};
 #[cfg(feature = "ocio")]
@@ -27,11 +27,12 @@ use ws_bridge::{OutboundUiMessages, WsBridge};
 fn main() {
     let config = AppConfig::default();
     tracing::info!(
-        "starting demo: {}x{}, ws_port={}, dev_mode={}",
+        "starting demo: {}x{}, ws_port={}, dev_mode={}, frontend={:?}",
         config.width,
         config.height,
         config.ws_port,
-        config.dev_mode
+        config.dev_mode,
+        config.frontend_mode
     );
 
     // Spawn WebSocket IPC server
@@ -46,6 +47,8 @@ fn main() {
     };
 
     let mut app = App::new();
+    let frontend_mode = config.frontend_mode;
+
     app.insert_resource(config)
         .insert_resource(OutboundUiMessages::default())
         .insert_resource(WsBridge {
@@ -64,9 +67,6 @@ fn main() {
                 }),
         )
         .add_plugins(CrispenPlugin)
-        .add_plugins(InputDispatchPlugin)
-        .add_plugins(bevy::ui_widgets::UiWidgetsPlugins)
-        .add_plugins(ui::CrispenUiPlugin)
         .add_systems(Startup, send_initial_state)
         .add_systems(
             Update,
@@ -77,6 +77,16 @@ fn main() {
                 forward_scopes_to_ui,
             ),
         );
+
+    app.add_plugins(InputDispatchPlugin)
+        .add_plugins(bevy::ui_widgets::UiWidgetsPlugins)
+        .add_plugins(ui::CrispenUiPlugin);
+
+    if frontend_mode == FrontendMode::Svelte {
+        tracing::info!(
+            "Svelte frontend mode enabled; keeping native in-window layout as fallback until embedded webview lands"
+        );
+    }
 
     #[cfg(feature = "ocio")]
     try_insert_ocio_resource(&mut app);

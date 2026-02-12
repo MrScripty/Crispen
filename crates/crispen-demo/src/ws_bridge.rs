@@ -206,6 +206,18 @@ fn dispatch_ui_message(
     image_loaded: &mut MessageWriter<ImageLoadedEvent>,
 ) {
     match msg {
+        UiToBevy::RequestState => {
+            outbound.send(BevyToUi::Initialize {
+                params: state.params.clone(),
+            });
+            if let Some(source) = images.source.as_ref() {
+                outbound.send(BevyToUi::ImageLoaded {
+                    width: source.width,
+                    height: source.height,
+                    bit_depth: format!("{:?}", source.source_bit_depth),
+                });
+            }
+        }
         UiToBevy::SetParams { params } => {
             commands.write(ColorGradingCommand::SetParams { params });
         }

@@ -58,6 +58,9 @@ pub enum BevyToUi {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum UiToBevy {
+    /// Request a fresh snapshot of backend state after UI connects.
+    RequestState,
+
     /// Set new grading parameters (UI → backend).
     SetParams {
         /// The new grading parameters.
