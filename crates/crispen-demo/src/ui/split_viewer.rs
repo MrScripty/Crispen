@@ -8,6 +8,7 @@ use crispen_bevy::resources::ImageState;
 use super::theme;
 use super::toolbar::ToolbarState;
 use super::viewer;
+use super::viewer_nav::{PICKABLE_IGNORE, ViewerFrame, ViewerImageWrapper};
 
 /// Handle to the source-image texture used by the split viewer.
 #[derive(Resource)]
@@ -98,10 +99,12 @@ pub fn spawn_viewer_area(
                     .with_children(|viewer_root| {
                         viewer_root
                             .spawn((
+                                ViewerFrame,
                                 Node {
                                     display: Display::Flex,
                                     justify_content: JustifyContent::Center,
                                     align_items: AlignItems::Center,
+                                    overflow: Overflow::clip(),
                                     width: Val::Percent(100.0),
                                     height: Val::Percent(100.0),
                                     border: UiRect::all(Val::Px(1.0)),
@@ -112,17 +115,33 @@ pub fn spawn_viewer_area(
                                 BorderColor::all(theme::BORDER_SUBTLE),
                             ))
                             .with_children(|frame| {
-                                frame.spawn((
-                                    ImageNode::new(source_handle).with_mode(NodeImageMode::Auto),
-                                    Node {
-                                        max_width: Val::Percent(100.0),
-                                        max_height: Val::Percent(100.0),
-                                        ..default()
-                                    },
-                                ));
+                                frame
+                                    .spawn((
+                                        ViewerImageWrapper,
+                                        Node {
+                                            position_type: PositionType::Absolute,
+                                            width: Val::Percent(100.0),
+                                            height: Val::Percent(100.0),
+                                            justify_content: JustifyContent::Center,
+                                            align_items: AlignItems::Center,
+                                            ..default()
+                                        },
+                                    ))
+                                    .with_children(|wrapper| {
+                                        wrapper.spawn((
+                                            ImageNode::new(source_handle)
+                                                .with_mode(NodeImageMode::Stretch),
+                                            Node {
+                                                width: Val::Percent(100.0),
+                                                height: Val::Percent(100.0),
+                                                ..default()
+                                            },
+                                        ));
+                                    });
 
                                 frame.spawn((
                                     Text::new("Source"),
+                                    PICKABLE_IGNORE,
                                     Node {
                                         position_type: PositionType::Absolute,
                                         top: Val::Px(8.0),

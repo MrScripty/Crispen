@@ -12,6 +12,7 @@ use crispen_bevy::resources::ViewerData;
 
 use super::split_viewer::GradedImageNode;
 use super::theme;
+use super::viewer_nav::{PICKABLE_IGNORE, ViewerFrame, ViewerImageWrapper, ViewerTransform};
 
 /// Marker for the "Ctrl+O to load" hint text, hidden once an image is loaded.
 #[derive(Component)]
@@ -62,10 +63,12 @@ pub fn spawn_viewer_panel(parent: &mut ChildSpawnerCommands, handle: Handle<Imag
         .with_children(|viewer| {
             viewer
                 .spawn((
+                    ViewerFrame,
                     Node {
                         display: Display::Flex,
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
+                        overflow: Overflow::clip(),
                         width: Val::Percent(100.0),
                         height: Val::Percent(100.0),
                         border: UiRect::all(Val::Px(1.0)),
@@ -76,18 +79,35 @@ pub fn spawn_viewer_panel(parent: &mut ChildSpawnerCommands, handle: Handle<Imag
                     BorderColor::all(theme::BORDER_SUBTLE),
                 ))
                 .with_children(|frame| {
-                    frame.spawn((
-                        GradedImageNode,
-                        ImageNode::new(handle).with_mode(NodeImageMode::Auto),
-                        Node {
-                            max_width: Val::Percent(100.0),
-                            max_height: Val::Percent(100.0),
-                            ..default()
-                        },
-                    ));
+                    // Zoom/pan wrapper: absolutely positioned, sized by
+                    // `apply_viewer_transform`.
+                    frame
+                        .spawn((
+                            ViewerImageWrapper,
+                            Node {
+                                position_type: PositionType::Absolute,
+                                width: Val::Percent(100.0),
+                                height: Val::Percent(100.0),
+                                justify_content: JustifyContent::Center,
+                                align_items: AlignItems::Center,
+                                ..default()
+                            },
+                        ))
+                        .with_children(|wrapper| {
+                            wrapper.spawn((
+                                GradedImageNode,
+                                ImageNode::new(handle).with_mode(NodeImageMode::Stretch),
+                                Node {
+                                    width: Val::Percent(100.0),
+                                    height: Val::Percent(100.0),
+                                    ..default()
+                                },
+                            ));
+                        });
 
                     frame.spawn((
                         Text::new("Viewer"),
+                        PICKABLE_IGNORE,
                         Node {
                             position_type: PositionType::Absolute,
                             top: Val::Px(8.0),
@@ -103,6 +123,7 @@ pub fn spawn_viewer_panel(parent: &mut ChildSpawnerCommands, handle: Handle<Imag
 
                     frame.spawn((
                         LoadHint,
+                        PICKABLE_IGNORE,
                         Text::new("Ctrl+O to load image"),
                         TextFont {
                             font_size: 18.0,
@@ -123,9 +144,16 @@ pub fn update_viewer_texture(
     mut images: ResMut<Assets<Image>>,
     hints: Query<Entity, With<LoadHint>>,
     mut commands: Commands,
+    mut transform: ResMut<ViewerTransform>,
 ) {
     if !viewer_data.is_changed() || viewer_data.width == 0 {
         return;
+    }
+
+    // Keep the viewer transform's aspect ratio in sync with the loaded image.
+    let ar = viewer_data.width as f32 / viewer_data.height as f32;
+    if transform.image_aspect_ratio != Some(ar) {
+        transform.image_aspect_ratio = Some(ar);
     }
     let Some(viewer) = viewer else { return };
 
@@ -159,5 +187,7 @@ pub fn update_viewer_texture(
         } else {
             existing.data = Some(viewer_data.pixel_bytes.clone());
         }
+    } else {
+        tracing::warn!("viewer Image asset not found for handle");
     }
 }
