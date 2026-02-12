@@ -19,6 +19,10 @@ use crispen_bevy::resources::{GpuPipelineState, GradingState, ImageState};
 use super::color_wheel::{ColorWheelMaterial, WheelType};
 use super::components::ParamId;
 use super::dial::{DialMaterial, DialRange, DialValue, ParamDial};
+use super::master_slider::{
+    MasterSliderInner, MasterSliderMaterial, MasterSliderRange, MasterSliderValue,
+    MasterSliderWheel,
+};
 use super::theme;
 use crate::image_loader;
 
@@ -183,14 +187,13 @@ pub fn handle_load_image_shortcut(
     let dialog = dialog.add_filter(
         "Images",
         &[
-            "jpg", "jpeg", "png", "tif", "tiff", "exr", "dpx", "cin", "hdr", "bmp", "tga",
-            "webp", "psd", "gif",
+            "jpg", "jpeg", "png", "tif", "tiff", "exr", "dpx", "cin", "hdr", "bmp", "tga", "webp",
+            "psd", "gif",
         ],
     );
     #[cfg(not(feature = "ocio"))]
     let dialog = dialog.add_filter("Images", &["jpg", "jpeg", "png", "tif", "tiff", "exr"]);
-    let Some(path) = dialog.pick_file()
-    else {
+    let Some(path) = dialog.pick_file() else {
         return;
     };
 
@@ -277,10 +280,8 @@ fn load_image_from_path(
         if let Some(ref cs) = loaded.detected_color_space {
             ocio.input_space = cs.clone();
         } else {
-            ocio.input_space = crate::ocio_support::map_detected_to_ocio_name(
-                detected_input_space,
-                &ocio.config,
-            );
+            ocio.input_space =
+                crate::ocio_support::map_detected_to_ocio_name(detected_input_space, &ocio.config);
         }
         ocio.dirty = true;
     }
@@ -306,6 +307,79 @@ fn viewer_target_size(window_q: &Query<&Window, With<PrimaryWindow>>) -> Option<
         .round() as u32;
 
     Some((target_width, target_height))
+}
+
+// ── Master Sliders → GradingState ───────────────────────────────────────────
+
+/// Sync master slider value changes to GradingState lift/gamma/gain/offset[3].
+pub fn sync_master_sliders_to_params(
+    sliders: Query<
+        (&MasterSliderValue, &MasterSliderWheel),
+        (Changed<MasterSliderValue>, With<MasterSliderInner>),
+    >,
+    mut state: ResMut<GradingState>,
+) {
+    for (value, wheel) in sliders.iter() {
+        let current_master = match wheel.0 {
+            WheelType::Lift => state.params.lift[3],
+            WheelType::Gamma => state.params.gamma[3],
+            WheelType::Gain => state.params.gain[3],
+            WheelType::Offset => state.params.offset[3],
+        };
+        if (current_master - value.0).abs() > PARAM_SYNC_EPSILON {
+            match wheel.0 {
+                WheelType::Lift => state.params.lift[3] = value.0,
+                WheelType::Gamma => state.params.gamma[3] = value.0,
+                WheelType::Gain => state.params.gain[3] = value.0,
+                WheelType::Offset => state.params.offset[3] = value.0,
+            }
+            state.dirty = true;
+        }
+    }
+}
+
+// ── GradingState → Master Sliders ──────────────────────────────────────────
+
+/// Sync GradingState back to master slider values when params change externally.
+pub fn sync_params_to_master_sliders(
+    state: Res<GradingState>,
+    mut sliders: Query<
+        (
+            Entity,
+            &MasterSliderWheel,
+            &mut MasterSliderValue,
+            &MasterSliderRange,
+        ),
+        With<MasterSliderInner>,
+    >,
+    q_material: Query<&MaterialNode<MasterSliderMaterial>>,
+    mut materials: ResMut<Assets<MasterSliderMaterial>>,
+) {
+    if !state.is_changed() {
+        return;
+    }
+    for (entity, wheel, mut value, range) in sliders.iter_mut() {
+        let target = match wheel.0 {
+            WheelType::Lift => state.params.lift[3],
+            WheelType::Gamma => state.params.gamma[3],
+            WheelType::Gain => state.params.gain[3],
+            WheelType::Offset => state.params.offset[3],
+        };
+        if (value.0 - target).abs() > PARAM_SYNC_EPSILON {
+            value.0 = target;
+
+            if let Ok(mat_node) = q_material.get(entity)
+                && let Some(mat) = materials.get_mut(mat_node.id())
+            {
+                let span = range.max - range.min;
+                mat.value_norm = if span.abs() < f32::EPSILON {
+                    0.5
+                } else {
+                    ((target - range.min) / span).clamp(0.0, 1.0)
+                };
+            }
+        }
+    }
 }
 
 // ── GradingState → Wheels ───────────────────────────────────────────────────

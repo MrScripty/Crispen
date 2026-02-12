@@ -8,21 +8,20 @@ pub mod components;
 pub mod dial;
 pub mod hue_curves;
 pub mod layout;
+pub mod master_slider;
 pub mod ofx_panel;
 pub mod primaries;
+pub mod scope_mask;
 pub mod split_viewer;
 pub mod systems;
 pub mod theme;
 pub mod toolbar;
 pub mod vectorscope;
 pub mod viewer;
+pub mod viewer_nav;
 
 use bevy::prelude::*;
 use bevy::ui::IsDefaultUiCamera;
-
-/// Entity id of the camera used to render UI.
-#[derive(Resource, Clone, Copy)]
-pub struct UiCameraEntity(pub Entity);
 
 /// Top-level UI plugin. Registers layout, widget, and interaction systems.
 pub struct CrispenUiPlugin;
@@ -32,10 +31,13 @@ impl Plugin for CrispenUiPlugin {
         app.add_plugins((
             color_wheel::ColorWheelPlugin,
             dial::DialPlugin,
+            master_slider::MasterSliderPlugin,
             hue_curves::HueCurvesPlugin,
+            scope_mask::ScopeMaskPlugin,
         ))
         .init_resource::<toolbar::ToolbarState>()
         .init_resource::<vectorscope::ScopeViewState>()
+        .init_resource::<viewer_nav::ViewerTransform>()
         .add_systems(
             Startup,
             (
@@ -45,6 +47,7 @@ impl Plugin for CrispenUiPlugin {
                 ofx_panel::setup_ofx_registry,
                 vectorscope::setup_vectorscope,
                 layout::spawn_root_layout,
+                log_ui_spawn_counts,
             )
                 .chain(),
         )
@@ -53,8 +56,10 @@ impl Plugin for CrispenUiPlugin {
             (
                 (
                     systems::sync_dials_to_params,
+                    systems::sync_master_sliders_to_params,
                     systems::sync_params_to_dials,
                     systems::sync_params_to_wheels,
+                    systems::sync_params_to_master_sliders,
                 )
                     .chain(),
                 dial::update_dial_visuals,
@@ -64,7 +69,6 @@ impl Plugin for CrispenUiPlugin {
                 toolbar::handle_toolbar_interactions,
                 toolbar::handle_toolbar_toggles,
                 toolbar::handle_toolbar_shortcuts,
-                toolbar::handle_dropdown_search_input,
                 toolbar::rebuild_toolbar_menus,
                 toolbar::sync_toolbar_ui,
                 ofx_panel::toggle_ofx_panel,
@@ -72,13 +76,40 @@ impl Plugin for CrispenUiPlugin {
                 vectorscope::sync_scope_dropdown_ui,
                 vectorscope::update_scope_texture,
                 systems::handle_load_image_shortcut,
+                viewer_nav::handle_viewer_scroll,
+                viewer_nav::reset_viewer_transform,
+                viewer_nav::apply_viewer_transform,
             ),
         )
-        .add_observer(systems::on_wheel_value_change);
+        .add_observer(systems::on_wheel_value_change)
+        .add_observer(toolbar::on_toolbar_option_click)
+        .add_observer(toolbar::on_toolbar_click_close_dropdown)
+        .add_observer(vectorscope::on_scope_option_click)
+        .add_observer(viewer_nav::on_viewer_drag_start)
+        .add_observer(viewer_nav::on_viewer_drag)
+        .add_observer(viewer_nav::on_viewer_drag_end)
+        .add_observer(viewer_nav::on_viewer_drag_cancel)
+        .add_observer(viewer_nav::on_viewer_click);
     }
 }
 
 fn setup_ui_camera(mut commands: Commands) {
-    let camera = commands.spawn((Camera2d, IsDefaultUiCamera)).id();
-    commands.insert_resource(UiCameraEntity(camera));
+    commands.spawn((Camera2d, IsDefaultUiCamera));
+}
+
+fn log_ui_spawn_counts(
+    toolbar_roots: Query<Entity, With<toolbar::ToolbarRoot>>,
+    viewer_containers: Query<Entity, With<split_viewer::ViewerContainer>>,
+    source_nodes: Query<Entity, With<split_viewer::SourceImageNode>>,
+    graded_nodes: Query<Entity, With<split_viewer::GradedImageNode>>,
+    scope_frames: Query<Entity, With<vectorscope::ScopeImageFrame>>,
+) {
+    tracing::info!(
+        "UI spawn counts: toolbar={}, viewer_container={}, source_nodes={}, graded_nodes={}, scope_frames={}",
+        toolbar_roots.iter().count(),
+        viewer_containers.iter().count(),
+        source_nodes.iter().count(),
+        graded_nodes.iter().count(),
+        scope_frames.iter().count()
+    );
 }

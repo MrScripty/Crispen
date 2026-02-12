@@ -182,10 +182,7 @@ fn maybe_resize_grading_image(
 /// Map an OIIO-detected color space string to a [`ColorSpaceId`].
 ///
 /// Falls back to inferring from bit depth when the string is unrecognised.
-pub fn detected_color_space_to_id(
-    name: Option<&str>,
-    bit_depth: BitDepth,
-) -> ColorSpaceId {
+pub fn detected_color_space_to_id(name: Option<&str>, bit_depth: BitDepth) -> ColorSpaceId {
     if let Some(name) = name {
         let lower = name.to_ascii_lowercase();
         // Match common OIIO / OCIO color space names.

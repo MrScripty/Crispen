@@ -1,9 +1,7 @@
 //! Root layout: top toolbar, main viewer row, primaries panel at bottom.
 
 use bevy::prelude::*;
-use bevy::ui::UiTargetCamera;
 
-use super::UiCameraEntity;
 use super::ofx_panel::OfxPluginRegistry;
 use super::split_viewer::SourceImageHandle;
 use super::vectorscope::VectorscopeImageHandle;
@@ -17,7 +15,6 @@ pub fn spawn_root_layout(
     source_handle: Res<SourceImageHandle>,
     vectorscope_handle: Res<VectorscopeImageHandle>,
     ofx_registry: Res<OfxPluginRegistry>,
-    ui_camera: Res<UiCameraEntity>,
 ) {
     commands
         .spawn((
@@ -28,7 +25,6 @@ pub fn spawn_root_layout(
                 height: Val::Percent(100.0),
                 ..default()
             },
-            UiTargetCamera(ui_camera.0),
             BackgroundColor(theme::BG_DARK),
         ))
         .with_children(|root| {
