@@ -48,6 +48,9 @@ pub const WHEEL_SIZE: f32 = 132.0;
 /// Horizontal gap (px) between adjacent color wheels.
 pub const WHEEL_GAP: f32 = 10.0;
 
+/// Height (px) of the horizontal master-level slider below each wheel.
+pub const MASTER_SLIDER_HEIGHT: f32 = 14.0;
+
 /// Width (px) reserved for each dial slot in the top/bottom rows.
 pub const DIAL_SLOT_WIDTH: f32 = 78.0;
 

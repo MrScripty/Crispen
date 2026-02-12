@@ -20,6 +20,7 @@ use bevy::ui::{
 use bevy::ui_render::prelude::{MaterialNode, UiMaterial, UiMaterialPlugin};
 use bevy::ui_widgets::ValueChange;
 
+use super::master_slider;
 use super::theme;
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -163,6 +164,8 @@ pub fn color_wheel(wheel_type: WheelType) -> impl Bundle {
                 },
                 TextColor(theme::TEXT_DIM),
             ),
+            // Horizontal master-level slider.
+            master_slider::master_slider(wheel_type),
         ],
     )
 }

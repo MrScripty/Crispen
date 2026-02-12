@@ -131,9 +131,9 @@ fn spawn_wheels_row(panel: &mut ChildSpawnerCommands) {
             align_items: AlignItems::Center,
             align_self: AlignSelf::Center,
             width: Val::Px(theme::WHEEL_GROUP_WIDTH),
-            height: Val::Px(theme::WHEEL_SIZE + 20.0),
-            min_height: Val::Px(theme::WHEEL_SIZE + 20.0),
-            max_height: Val::Px(theme::WHEEL_SIZE + 20.0),
+            height: Val::Px(theme::WHEEL_SIZE + 20.0 + 3.0 + theme::MASTER_SLIDER_HEIGHT),
+            min_height: Val::Px(theme::WHEEL_SIZE + 20.0 + 3.0 + theme::MASTER_SLIDER_HEIGHT),
+            max_height: Val::Px(theme::WHEEL_SIZE + 20.0 + 3.0 + theme::MASTER_SLIDER_HEIGHT),
             ..default()
         })
         .with_children(|row| {
