@@ -18,13 +18,14 @@ pub use crispen_gpu::ViewerFormat;
 
 use events::{ColorGradingCommand, ImageLoadedEvent, ParamsUpdatedEvent, ScopeDataReadyEvent};
 use resources::{
-    GpuPipelineState, GradingState, ImageState, PipelinePerfStats, ScopeConfig, ScopeState,
-    ViewerData, VulkanInteropState,
+    GpuPipelineState, GradingState, ImageState, PipelinePerfStats, ScopeConfig, ScopeMaskData,
+    ScopeState, ViewerData, VulkanInteropState,
 };
 #[cfg(feature = "ocio")]
 use systems::bake_ocio_luts;
 use systems::{
     consume_gpu_results, detect_param_changes, handle_grading_commands, submit_gpu_work,
+    upload_scope_mask,
 };
 
 /// Main Bevy plugin for the Crispen color grading pipeline.
@@ -47,6 +48,7 @@ impl Plugin for CrispenPlugin {
             .init_resource::<ViewerData>()
             .init_resource::<ScopeState>()
             .init_resource::<ScopeConfig>()
+            .init_resource::<ScopeMaskData>()
             .init_resource::<PipelinePerfStats>()
             .add_systems(Startup, init_gpu_pipeline)
             .add_systems(
@@ -54,7 +56,8 @@ impl Plugin for CrispenPlugin {
                 (
                     handle_grading_commands,
                     consume_gpu_results.after(handle_grading_commands),
-                    submit_gpu_work.after(consume_gpu_results),
+                    upload_scope_mask.after(consume_gpu_results),
+                    submit_gpu_work.after(upload_scope_mask),
                     detect_param_changes,
                 ),
             );

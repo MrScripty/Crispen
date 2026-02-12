@@ -17,8 +17,8 @@ use crate::events::{
 #[cfg(feature = "ocio")]
 use crate::resources::OcioColorManagement;
 use crate::resources::{
-    GpuPipelineState, GradingState, ImageState, PipelinePerfStats, ScopeConfig, ScopeState,
-    ViewerData,
+    GpuPipelineState, GradingState, ImageState, PipelinePerfStats, ScopeConfig, ScopeMaskData,
+    ScopeState, ViewerData,
 };
 
 /// Process inbound grading commands from the UI.
@@ -271,6 +271,27 @@ pub fn consume_gpu_results(
         apply_scope_results(&mut scope_state, results);
         scope_ready.write(ScopeDataReadyEvent);
     }
+}
+
+/// Upload the scope mask to the GPU pipeline when it changes.
+pub fn upload_scope_mask(
+    mut mask_data: ResMut<ScopeMaskData>,
+    gpu: Option<ResMut<GpuPipelineState>>,
+) {
+    if !mask_data.dirty {
+        return;
+    }
+    let Some(mut gpu) = gpu else {
+        mask_data.dirty = false;
+        return;
+    };
+
+    if mask_data.active && !mask_data.mask.is_empty() {
+        gpu.pipeline.set_scope_mask(&mask_data.mask);
+    } else {
+        gpu.pipeline.clear_scope_mask();
+    }
+    mask_data.dirty = false;
 }
 
 fn apply_scope_results(scope_state: &mut ScopeState, results: ScopeResults) {

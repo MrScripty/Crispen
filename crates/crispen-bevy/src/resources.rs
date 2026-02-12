@@ -134,6 +134,17 @@ pub struct VulkanInteropState {
     pub capabilities: VulkanInteropCapabilities,
 }
 
+/// Per-pixel scope mask uploaded to the GPU.
+///
+/// When `active` is true, only pixels with `mask[i] == 1` are included in
+/// scope analysis. The mask length must match the source image pixel count.
+#[derive(Resource, Default)]
+pub struct ScopeMaskData {
+    pub mask: Vec<u32>,
+    pub active: bool,
+    pub dirty: bool,
+}
+
 /// Runtime timings for the grading pipeline.
 #[derive(Resource)]
 pub struct PipelinePerfStats {
