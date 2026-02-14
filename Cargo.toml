@@ -29,8 +29,10 @@ openfx-sys = "0.1"
 # File dialog
 rfd = "0.15"
 
-# Webview
+# Webview / CEF
 wry = "0.53"
+cef = "143.7"
+urlencoding = "2.1"
 
 # Networking
 tokio = { version = "1.44", features = ["sync", "rt-multi-thread", "macros"] }

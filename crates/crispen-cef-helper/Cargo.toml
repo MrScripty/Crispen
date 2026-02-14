@@ -1,0 +1,13 @@
+[package]
+name = "crispen-cef-helper"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CEF subprocess helper for Crispen"
+
+[[bin]]
+name = "crispen-cef-helper"
+path = "src/main.rs"
+
+[dependencies]
+cef = { workspace = true }

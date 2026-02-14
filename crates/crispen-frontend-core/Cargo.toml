@@ -1,0 +1,11 @@
+[package]
+name = "crispen-frontend-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Frontend compositing abstractions for Crispen"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
