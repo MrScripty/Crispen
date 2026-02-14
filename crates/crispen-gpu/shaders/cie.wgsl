@@ -29,10 +29,10 @@ fn cie_compute(@builtin(global_invocation_id) gid: vec3<u32>) {
     let cx = x_val / sum; // CIE x
     let cy = y_val / sum; // CIE y
 
-    // Map chromaticity [0, 0.8] to grid [0, resolution).
+    // Map chromaticity to grid: x [0, 0.8] → [0, res), y [0, 0.9] → [res, 0) (inverted).
     let res_f = f32(resolution);
     let gx = u32(clamp(cx / 0.8 * res_f, 0.0, res_f - 1.0));
-    let gy = u32(clamp(cy / 0.8 * res_f, 0.0, res_f - 1.0));
+    let gy = u32(clamp((1.0 - cy / 0.9) * res_f, 0.0, res_f - 1.0));
 
     atomicAdd(&density[gy * resolution + gx], 1u);
 }

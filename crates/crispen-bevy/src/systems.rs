@@ -185,6 +185,7 @@ pub fn submit_gpu_work(
     mut state: ResMut<GradingState>,
     mut perf: ResMut<PipelinePerfStats>,
     gpu: Option<ResMut<GpuPipelineState>>,
+    scope_config: Res<ScopeConfig>,
     #[cfg(feature = "ocio")] ocio: Option<Res<OcioColorManagement>>,
 ) {
     if !state.dirty {
@@ -224,6 +225,14 @@ pub fn submit_gpu_work(
         return;
     }
 
+    // Sync scope visibility so hidden scopes skip GPU compute.
+    gpu.pipeline.set_scope_visibility(
+        scope_config.histogram_visible,
+        scope_config.waveform_visible,
+        scope_config.vectorscope_visible,
+        scope_config.cie_visible,
+    );
+
     let submit_start = Instant::now();
 
     // Non-blocking GPU submission: bake → apply → format convert → scopes → async readback.
@@ -256,6 +265,8 @@ pub fn consume_gpu_results(
     mut scope_ready: MessageWriter<ScopeDataReadyEvent>,
     gpu: Option<ResMut<GpuPipelineState>>,
 ) {
+    let t0 = Instant::now();
+
     let Some(mut gpu) = gpu else {
         return;
     };
@@ -264,15 +275,29 @@ pub fn consume_gpu_results(
         return;
     };
 
+    let t_readback = t0.elapsed();
+
+    let viewer_bytes_len = result.viewer_bytes.len();
     viewer_data.pixel_bytes = result.viewer_bytes;
     viewer_data.width = result.width;
     viewer_data.height = result.height;
     viewer_data.format = result.format;
 
+    let t_viewer_copy = t0.elapsed();
+
     if let Some(results) = result.scopes {
         apply_scope_results(&mut scope_state, results);
         scope_ready.write(ScopeDataReadyEvent);
     }
+
+    let t_total = t0.elapsed();
+    tracing::info!(
+        "[PERF] consume_gpu_results: readback={:.2}ms viewer_copy={:.2}ms total={:.2}ms ({}bytes)",
+        t_readback.as_secs_f64() * 1000.0,
+        (t_viewer_copy - t_readback).as_secs_f64() * 1000.0,
+        t_total.as_secs_f64() * 1000.0,
+        viewer_bytes_len,
+    );
 }
 
 /// Upload the scope mask to the GPU pipeline when it changes.

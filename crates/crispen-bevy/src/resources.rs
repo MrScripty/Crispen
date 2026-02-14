@@ -85,7 +85,7 @@ impl Default for ViewerData {
             pixel_bytes: Vec::new(),
             width: 0,
             height: 0,
-            format: ViewerFormat::F16,
+            format: ViewerFormat::Srgb8,
         }
     }
 }
@@ -100,12 +100,23 @@ pub struct ScopeState {
 }
 
 /// Configuration for which scopes are active.
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct ScopeConfig {
     pub histogram_visible: bool,
     pub waveform_visible: bool,
     pub vectorscope_visible: bool,
     pub cie_visible: bool,
+}
+
+impl Default for ScopeConfig {
+    fn default() -> Self {
+        Self {
+            histogram_visible: true,
+            waveform_visible: true,
+            vectorscope_visible: true,
+            cie_visible: true,
+        }
+    }
 }
 
 impl ScopeConfig {

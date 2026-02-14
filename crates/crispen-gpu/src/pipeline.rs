@@ -55,6 +55,11 @@ pub struct GpuGradingPipeline {
     async_readback: Option<AsyncReadback>,
     scope_config: ScopeConfig,
     viewer_format: ViewerFormat,
+    /// Per-scope visibility flags (skips GPU compute when hidden).
+    scope_histogram_visible: bool,
+    scope_waveform_visible: bool,
+    scope_vectorscope_visible: bool,
+    scope_cie_visible: bool,
     /// Dimensions + format of the last async submission (for FrameResult).
     last_async_width: u32,
     last_async_height: u32,
@@ -127,7 +132,11 @@ impl GpuGradingPipeline {
             image_readback_staging: None,
             async_readback: None,
             scope_config: ScopeConfig::default(),
-            viewer_format: ViewerFormat::F16,
+            viewer_format: ViewerFormat::Srgb8,
+            scope_histogram_visible: true,
+            scope_waveform_visible: true,
+            scope_vectorscope_visible: true,
+            scope_cie_visible: true,
             last_async_width: 0,
             last_async_height: 0,
             last_async_viewer_byte_size: 0,
@@ -277,6 +286,17 @@ impl GpuGradingPipeline {
                     viewer_byte_size,
                 );
             }
+            ViewerFormat::Srgb8 => {
+                let output = self.current_output.as_ref().unwrap();
+                let srgb_buf = self.format_converter.convert_to_srgb8(
+                    &self.device,
+                    &self.queue,
+                    output,
+                    &mut encoder,
+                );
+                let image_staging = self.image_readback_staging.as_ref().unwrap();
+                encoder.copy_buffer_to_buffer(srgb_buf, 0, image_staging, 0, viewer_byte_size);
+            }
         }
 
         // 4. Scope dispatches.
@@ -291,6 +311,10 @@ impl GpuGradingPipeline {
             cfg.vectorscope_resolution,
             cfg.cie_resolution,
             &mut encoder,
+            self.scope_histogram_visible,
+            self.scope_waveform_visible,
+            self.scope_vectorscope_visible,
+            self.scope_cie_visible,
         );
 
         // 5. Copy scope data to staging buffers.
@@ -421,6 +445,10 @@ impl GpuGradingPipeline {
             cfg.vectorscope_resolution,
             cfg.cie_resolution,
             &mut encoder,
+            self.scope_histogram_visible,
+            self.scope_waveform_visible,
+            self.scope_vectorscope_visible,
+            self.scope_cie_visible,
         );
 
         readback.copy_to_staging(&mut encoder, scope_buffers);
@@ -499,44 +527,42 @@ impl GpuGradingPipeline {
         let output = self.current_output.as_ref().unwrap();
         let scope_buffers = self.scope_buffers.as_ref().unwrap();
 
-        match viewer_format {
+        // Format conversion — produces the viewer source buffer.
+        let viewer_src: &wgpu::Buffer = match viewer_format {
             ViewerFormat::F16 => {
-                let f16_buf =
-                    self.format_converter
-                        .convert(&self.device, &self.queue, output, &mut encoder);
-                self.scope_dispatch.dispatch(
+                self.format_converter
+                    .convert(&self.device, &self.queue, output, &mut encoder)
+            }
+            ViewerFormat::Srgb8 => {
+                self.format_converter.convert_to_srgb8(
                     &self.device,
                     &self.queue,
                     output,
-                    scope_buffers,
-                    cfg.waveform_height,
-                    cfg.vectorscope_resolution,
-                    cfg.cie_resolution,
                     &mut encoder,
-                );
-                let async_rb = self.async_readback.as_mut().unwrap();
-                async_rb.submit_readback(&mut encoder, f16_buf, viewer_byte_size, scope_buffers);
+                )
             }
-            ViewerFormat::F32 => {
-                self.scope_dispatch.dispatch(
-                    &self.device,
-                    &self.queue,
-                    output,
-                    scope_buffers,
-                    cfg.waveform_height,
-                    cfg.vectorscope_resolution,
-                    cfg.cie_resolution,
-                    &mut encoder,
-                );
-                let async_rb = self.async_readback.as_mut().unwrap();
-                async_rb.submit_readback(
-                    &mut encoder,
-                    &output.buffer,
-                    viewer_byte_size,
-                    scope_buffers,
-                );
-            }
-        }
+            ViewerFormat::F32 => &output.buffer,
+        };
+
+        // 4. Scope dispatches (conditional on visibility).
+        self.scope_dispatch.dispatch(
+            &self.device,
+            &self.queue,
+            output,
+            scope_buffers,
+            cfg.waveform_height,
+            cfg.vectorscope_resolution,
+            cfg.cie_resolution,
+            &mut encoder,
+            self.scope_histogram_visible,
+            self.scope_waveform_visible,
+            self.scope_vectorscope_visible,
+            self.scope_cie_visible,
+        );
+
+        // 5. Async readback staging copies.
+        let async_rb = self.async_readback.as_mut().unwrap();
+        async_rb.submit_readback(&mut encoder, viewer_src, viewer_byte_size, scope_buffers);
 
         // ── Single submit ────────────────────────────────────────
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -593,7 +619,21 @@ impl GpuGradingPipeline {
         self.current_output.as_ref()
     }
 
-    /// Set the viewer pixel format (F16 or F32).
+    /// Set per-scope visibility flags. Hidden scopes skip GPU compute dispatch.
+    pub fn set_scope_visibility(
+        &mut self,
+        histogram: bool,
+        waveform: bool,
+        vectorscope: bool,
+        cie: bool,
+    ) {
+        self.scope_histogram_visible = histogram;
+        self.scope_waveform_visible = waveform;
+        self.scope_vectorscope_visible = vectorscope;
+        self.scope_cie_visible = cie;
+    }
+
+    /// Set the viewer pixel format (F16, F32, or Srgb8).
     pub fn set_viewer_format(&mut self, format: ViewerFormat) {
         if self.viewer_format != format {
             self.viewer_format = format;

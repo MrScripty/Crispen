@@ -1,5 +1,7 @@
 //! GPU compute pass for baking `GradingParams` into a 3D LUT.
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
 use std::num::NonZeroU64;
 
 use crispen_core::transform::params::GradingParams;
@@ -25,6 +27,8 @@ pub struct LutBaker {
     ocio_odt_view: wgpu::TextureView,
     ocio_sampler: wgpu::Sampler,
     use_ocio: bool,
+    /// Hash of the last uploaded curve data (skip re-upload when unchanged).
+    last_curve_hash: u64,
 }
 
 impl LutBaker {
@@ -172,6 +176,7 @@ impl LutBaker {
             ocio_odt_view,
             ocio_sampler,
             use_ocio: false,
+            last_curve_hash: 0,
         }
     }
 
@@ -208,12 +213,34 @@ impl LutBaker {
     }
 
     /// Upload curve data from `GradingParams` as 1D textures.
+    ///
+    /// Skips re-upload if curve data is unchanged since the last call.
     pub fn upload_curves(
         &mut self,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         params: &GradingParams,
     ) {
+        // Hash curve control points to skip redundant texture uploads.
+        let mut hasher = DefaultHasher::new();
+        for curve in [
+            &params.hue_vs_hue,
+            &params.hue_vs_sat,
+            &params.lum_vs_sat,
+            &params.sat_vs_sat,
+        ] {
+            hasher.write_usize(curve.len());
+            for pt in curve {
+                hasher.write(&pt[0].to_ne_bytes());
+                hasher.write(&pt[1].to_ne_bytes());
+            }
+        }
+        let hash = hasher.finish();
+        if hash == self.last_curve_hash {
+            return;
+        }
+        self.last_curve_hash = hash;
+
         let curves: [(&Vec<[f32; 2]>, usize); 4] = [
             (&params.hue_vs_hue, 0),
             (&params.hue_vs_sat, 1),

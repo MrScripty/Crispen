@@ -160,9 +160,10 @@ impl ScopeDispatch {
         );
     }
 
-    /// Dispatch all scope shaders onto the given encoder.
+    /// Dispatch scope shaders onto the given encoder.
     ///
-    /// The caller is responsible for submitting the encoder.
+    /// Only dispatches compute passes for visible scopes. Buffers are always
+    /// cleared so readback returns zeroed data for hidden scopes.
     #[allow(clippy::too_many_arguments)]
     pub fn dispatch(
         &self,
@@ -174,7 +175,19 @@ impl ScopeDispatch {
         vectorscope_resolution: u32,
         cie_resolution: u32,
         encoder: &mut wgpu::CommandEncoder,
+        histogram_visible: bool,
+        waveform_visible: bool,
+        vectorscope_visible: bool,
+        cie_visible: bool,
     ) {
+        if !histogram_visible && !waveform_visible && !vectorscope_visible && !cie_visible {
+            // Still clear buffers so readback returns valid zeroed data.
+            encoder.clear_buffer(&scope_buffers.histogram, 0, None);
+            encoder.clear_buffer(&scope_buffers.waveform, 0, None);
+            encoder.clear_buffer(&scope_buffers.vectorscope, 0, None);
+            encoder.clear_buffer(&scope_buffers.cie, 0, None);
+            return;
+        }
         let pixel_count = image.pixel_count();
         let workgroups = pixel_count.div_ceil(256);
 
@@ -218,33 +231,33 @@ impl ScopeDispatch {
         encoder.clear_buffer(&scope_buffers.cie, 0, None);
 
         // Histogram pass.
-        let hist_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("crispen_histogram_bg"),
-            layout: &self.histogram_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: image.buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: scope_buffers.histogram.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: self.pixel_count_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: self.mask_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: self.mask_active_buf.as_entire_binding(),
-                },
-            ],
-        });
-        {
+        if histogram_visible {
+            let hist_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("crispen_histogram_bg"),
+                layout: &self.histogram_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: image.buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: scope_buffers.histogram.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.pixel_count_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.mask_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.mask_active_buf.as_entire_binding(),
+                    },
+                ],
+            });
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("crispen_histogram_pass"),
                 timestamp_writes: None,
@@ -255,41 +268,41 @@ impl ScopeDispatch {
         }
 
         // Waveform pass.
-        let wf_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("crispen_waveform_bg"),
-            layout: &self.waveform_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: image.buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: scope_buffers.waveform.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: self.wf_width_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: self.wf_height_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: self.wf_waveform_height_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: self.mask_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 6,
-                    resource: self.mask_active_buf.as_entire_binding(),
-                },
-            ],
-        });
-        {
+        if waveform_visible {
+            let wf_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("crispen_waveform_bg"),
+                layout: &self.waveform_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: image.buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: scope_buffers.waveform.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.wf_width_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.wf_height_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.wf_waveform_height_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: self.mask_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 6,
+                        resource: self.mask_active_buf.as_entire_binding(),
+                    },
+                ],
+            });
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("crispen_waveform_pass"),
                 timestamp_writes: None,
@@ -300,37 +313,37 @@ impl ScopeDispatch {
         }
 
         // Vectorscope pass.
-        let vs_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("crispen_vectorscope_bg"),
-            layout: &self.vectorscope_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: image.buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: scope_buffers.vectorscope.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: self.pixel_count_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: self.vs_resolution_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: self.mask_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: self.mask_active_buf.as_entire_binding(),
-                },
-            ],
-        });
-        {
+        if vectorscope_visible {
+            let vs_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("crispen_vectorscope_bg"),
+                layout: &self.vectorscope_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: image.buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: scope_buffers.vectorscope.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.pixel_count_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.vs_resolution_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.mask_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: self.mask_active_buf.as_entire_binding(),
+                    },
+                ],
+            });
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("crispen_vectorscope_pass"),
                 timestamp_writes: None,
@@ -341,37 +354,37 @@ impl ScopeDispatch {
         }
 
         // CIE pass.
-        let cie_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("crispen_cie_bg"),
-            layout: &self.cie_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: image.buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: scope_buffers.cie.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: self.pixel_count_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: self.cie_resolution_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: self.mask_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: self.mask_active_buf.as_entire_binding(),
-                },
-            ],
-        });
-        {
+        if cie_visible {
+            let cie_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("crispen_cie_bg"),
+                layout: &self.cie_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: image.buffer.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: scope_buffers.cie.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: self.pixel_count_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: self.cie_resolution_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 4,
+                        resource: self.mask_buf.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 5,
+                        resource: self.mask_active_buf.as_entire_binding(),
+                    },
+                ],
+            });
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("crispen_cie_pass"),
                 timestamp_writes: None,
