@@ -68,12 +68,13 @@ mod tests {
 
     #[test]
     fn test_evaluate_transform_same_space_identity() {
-        use crate::transform::params::{ColorManagementConfig, ColorSpaceId};
+        use crate::transform::params::{ColorManagementConfig, ColorSpaceId, DisplayOetf};
         let params = GradingParams {
             color_management: ColorManagementConfig {
                 input_space: ColorSpaceId::AcesCg,
                 working_space: ColorSpaceId::AcesCg,
                 output_space: ColorSpaceId::AcesCg,
+                display_oetf: DisplayOetf::Srgb,
             },
             ..GradingParams::default()
         };
@@ -91,12 +92,13 @@ mod tests {
 
     #[test]
     fn test_evaluate_transform_preserves_black() {
-        use crate::transform::params::{ColorManagementConfig, ColorSpaceId};
+        use crate::transform::params::{ColorManagementConfig, ColorSpaceId, DisplayOetf};
         let params = GradingParams {
             color_management: ColorManagementConfig {
                 input_space: ColorSpaceId::AcesCg,
                 working_space: ColorSpaceId::AcesCg,
                 output_space: ColorSpaceId::AcesCg,
+                display_oetf: DisplayOetf::Srgb,
             },
             ..GradingParams::default()
         };

@@ -72,7 +72,7 @@ pub fn apply_output_transform(rgb: [f32; 3], config: &ColorManagementConfig) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transform::params::ColorSpaceId;
+    use crate::transform::params::{ColorSpaceId, DisplayOetf};
 
     const EPSILON: f32 = 1e-4;
 
@@ -82,6 +82,7 @@ mod tests {
             input_space: ColorSpaceId::AcesCg,
             working_space: ColorSpaceId::AcesCg,
             output_space: ColorSpaceId::Srgb,
+            display_oetf: DisplayOetf::Srgb,
         };
         let rgb = [0.5, 0.3, 0.7];
         assert_eq!(apply_input_transform(rgb, &config), rgb);
@@ -93,6 +94,7 @@ mod tests {
             input_space: ColorSpaceId::Srgb,
             working_space: ColorSpaceId::AcesCg,
             output_space: ColorSpaceId::AcesCg,
+            display_oetf: DisplayOetf::Srgb,
         };
         let rgb = [0.5, 0.3, 0.7];
         assert_eq!(apply_output_transform(rgb, &config), rgb);
@@ -104,6 +106,7 @@ mod tests {
             input_space: ColorSpaceId::LinearSrgb,
             working_space: ColorSpaceId::AcesCg,
             output_space: ColorSpaceId::LinearSrgb,
+            display_oetf: DisplayOetf::Srgb,
         };
         let rgb = [0.5, 0.3, 0.7];
         let working = apply_input_transform(rgb, &config);

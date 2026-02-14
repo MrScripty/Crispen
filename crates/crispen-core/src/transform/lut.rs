@@ -272,7 +272,7 @@ impl Lut3D {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::transform::params::{ColorManagementConfig, ColorSpaceId};
+    use crate::transform::params::{ColorManagementConfig, ColorSpaceId, DisplayOetf};
 
     const EPSILON: f32 = 1e-5;
 
@@ -282,6 +282,7 @@ mod tests {
                 input_space: ColorSpaceId::AcesCg,
                 working_space: ColorSpaceId::AcesCg,
                 output_space: ColorSpaceId::AcesCg,
+                display_oetf: DisplayOetf::Srgb,
             },
             ..GradingParams::default()
         }
