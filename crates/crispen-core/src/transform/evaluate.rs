@@ -35,7 +35,13 @@ pub fn evaluate_transform(rgb: [f32; 3], params: &GradingParams) -> [f32; 3] {
     let mut c = rgb;
     c = apply_input_transform(c, &params.color_management);
     c = apply_white_balance(c, params.temperature, params.tint);
-    c = apply_cdl(c, &params.lift, &params.gamma, &params.gain, &params.offset);
+    c = apply_cdl(
+        c,
+        &params.combined_lift(),
+        &params.combined_gamma(),
+        &params.combined_gain(),
+        &params.combined_offset(),
+    );
     c = apply_contrast(c, params.contrast, params.pivot);
     c = apply_shadows_highlights(c, params.shadows, params.highlights);
     c = apply_saturation_hue(c, params.saturation, params.hue, params.luma_mix);

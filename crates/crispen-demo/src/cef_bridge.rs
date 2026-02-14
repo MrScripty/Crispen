@@ -339,8 +339,9 @@ fn dispatch_ui_message(
             // handle_cef_ipc in the same frame.
             if state.params != params {
                 tracing::info!(
-                    "SetParams: updating grading state (lift={:?}, gamma={:?}, gain={:?}, offset={:?})",
-                    params.lift, params.gamma, params.gain, params.offset
+                    "SetParams: updating grading state (bars: lift={:?}, gamma={:?}, gain={:?}, offset={:?}; wheels: lift={:?}, gamma={:?}, gain={:?}, offset={:?})",
+                    params.lift, params.gamma, params.gain, params.offset,
+                    params.lift_wheel, params.gamma_wheel, params.gain_wheel, params.offset_wheel
                 );
                 state.params = params.clone();
                 state.dirty = true;

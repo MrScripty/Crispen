@@ -7,7 +7,12 @@
 
   const wheels = ['lift', 'gamma', 'gain', 'offset'] as const;
   type WheelName = (typeof wheels)[number];
+  type WheelFieldName = `${WheelName}_wheel`;
   const channels = ['R', 'G', 'B', 'M'] as const;
+
+  function wheelField(wheel: WheelName): WheelFieldName {
+    return `${wheel}_wheel`;
+  }
 
   // Canvas refs for each wheel.
   let canvasRefs: Record<string, HTMLCanvasElement | undefined> = $state({});
@@ -16,9 +21,9 @@
   const WHEEL_RADIUS = WHEEL_SIZE / 2 - 8;
   const RING_WIDTH = 10;
 
-  // Neutral center for each wheel type.
+  // Neutral center for each wheel type (must match GradingParams defaults).
   function neutralRgb(wheel: WheelName): [number, number, number] {
-    return wheel === 'gain' ? [1, 1, 1] : [0, 0, 0];
+    return (wheel === 'gain' || wheel === 'gamma') ? [1, 1, 1] : [0, 0, 0];
   }
 
   // Map RGB offset to 2D position (chrominance plane).
@@ -64,16 +69,17 @@
 
   function updateWheel(wheel: WheelName, channel: number, value: number) {
     const updated = $state.snapshot(params) as GradingParams;
-    updated[wheel][channel] = value;
+    updated[wheelField(wheel)][channel] = value;
     bridge.setParams(updated);
   }
 
   function updateWheelRgb(wheel: WheelName, r: number, g: number, b: number) {
     const updated = $state.snapshot(params) as GradingParams;
+    const field = wheelField(wheel);
     const neutral = neutralRgb(wheel);
-    updated[wheel][0] = neutral[0] + r;
-    updated[wheel][1] = neutral[1] + g;
-    updated[wheel][2] = neutral[2] + b;
+    updated[field][0] = neutral[0] + r;
+    updated[field][1] = neutral[1] + g;
+    updated[field][2] = neutral[2] + b;
     bridge.setParams(updated);
   }
 
@@ -126,10 +132,11 @@
   // Double-click to reset a wheel to neutral.
   function handleDblClick(wheel: WheelName) {
     const updated = $state.snapshot(params) as GradingParams;
+    const field = wheelField(wheel);
     const neutral = neutralRgb(wheel);
-    updated[wheel][0] = neutral[0];
-    updated[wheel][1] = neutral[1];
-    updated[wheel][2] = neutral[2];
+    updated[field][0] = neutral[0];
+    updated[field][1] = neutral[1];
+    updated[field][2] = neutral[2];
     bridge.setParams(updated);
   }
 
@@ -182,11 +189,12 @@
     ctx.lineTo(cx + innerR - 4, cy);
     ctx.stroke();
 
-    // Position indicator based on current R, G, B values.
+    // Position indicator based on current wheel R, G, B values.
+    const field = wheelField(wheel);
     const neutral = neutralRgb(wheel);
-    const dr = params[wheel][0] - neutral[0];
-    const dg = params[wheel][1] - neutral[1];
-    const db = params[wheel][2] - neutral[2];
+    const dr = params[field][0] - neutral[0];
+    const dg = params[field][1] - neutral[1];
+    const db = params[field][2] - neutral[2];
     const [px, py] = rgbToXy(dr, dg, db);
 
     // Scale to canvas coords.
@@ -210,13 +218,13 @@
     ctx.fill();
   }
 
-  // Redraw all wheels when params change.
+  // Redraw all wheels when wheel params change.
   $effect(() => {
-    // Touch params to create dependency.
-    void params.lift;
-    void params.gamma;
-    void params.gain;
-    void params.offset;
+    // Touch wheel params to create dependency.
+    void params.lift_wheel;
+    void params.gamma_wheel;
+    void params.gain_wheel;
+    void params.offset_wheel;
     for (const wheel of wheels) {
       drawWheel(wheel);
     }
@@ -253,7 +261,7 @@
               <input
                 type="number"
                 step="0.01"
-                value={params[wheel][i]}
+                value={params[wheelField(wheel)][i]}
                 onchange={(e) =>
                   updateWheel(wheel, i, parseFloat((e.target as HTMLInputElement).value))}
               />

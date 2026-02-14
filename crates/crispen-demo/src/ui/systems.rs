@@ -123,8 +123,8 @@ pub fn on_wheel_value_change(
             // Additive channels (neutral = 0).
             // X → B (Cb direction), Y → R/G balance (Cr direction).
             let master = match wheel_type {
-                WheelType::Lift => state.params.lift[3],
-                _ => state.params.offset[3],
+                WheelType::Lift => state.params.lift_wheel[3],
+                _ => state.params.offset_wheel[3],
             };
             [dy, -dy, dx, master]
         }
@@ -132,18 +132,18 @@ pub fn on_wheel_value_change(
             // Multiplicative channels (neutral = 1).
             // X → B (Cb direction), Y → R/G balance (Cr direction).
             let master = match wheel_type {
-                WheelType::Gamma => state.params.gamma[3],
-                _ => state.params.gain[3],
+                WheelType::Gamma => state.params.gamma_wheel[3],
+                _ => state.params.gain_wheel[3],
             };
             [1.0 + dy, 1.0 - dy, 1.0 + dx, master]
         }
     };
 
     match wheel_type {
-        WheelType::Lift => state.params.lift = channels,
-        WheelType::Gamma => state.params.gamma = channels,
-        WheelType::Gain => state.params.gain = channels,
-        WheelType::Offset => state.params.offset = channels,
+        WheelType::Lift => state.params.lift_wheel = channels,
+        WheelType::Gamma => state.params.gamma_wheel = channels,
+        WheelType::Gain => state.params.gain_wheel = channels,
+        WheelType::Offset => state.params.offset_wheel = channels,
     }
     state.dirty = true;
 }
@@ -340,10 +340,10 @@ pub fn sync_master_sliders_to_params(
 ) {
     for (value, wheel) in sliders.iter() {
         let current_master = match wheel.0 {
-            WheelType::Lift => state.params.lift[3],
-            WheelType::Gamma => state.params.gamma[3],
-            WheelType::Gain => state.params.gain[3],
-            WheelType::Offset => state.params.offset[3],
+            WheelType::Lift => state.params.lift_wheel[3],
+            WheelType::Gamma => state.params.gamma_wheel[3],
+            WheelType::Gain => state.params.gain_wheel[3],
+            WheelType::Offset => state.params.offset_wheel[3],
         };
         if (current_master - value.0).abs() > PARAM_SYNC_EPSILON {
             tracing::info!(
@@ -353,10 +353,10 @@ pub fn sync_master_sliders_to_params(
                 value.0,
             );
             match wheel.0 {
-                WheelType::Lift => state.params.lift[3] = value.0,
-                WheelType::Gamma => state.params.gamma[3] = value.0,
-                WheelType::Gain => state.params.gain[3] = value.0,
-                WheelType::Offset => state.params.offset[3] = value.0,
+                WheelType::Lift => state.params.lift_wheel[3] = value.0,
+                WheelType::Gamma => state.params.gamma_wheel[3] = value.0,
+                WheelType::Gain => state.params.gain_wheel[3] = value.0,
+                WheelType::Offset => state.params.offset_wheel[3] = value.0,
             }
             state.dirty = true;
         }
@@ -385,10 +385,10 @@ pub fn sync_params_to_master_sliders(
     }
     for (entity, wheel, mut value, range) in sliders.iter_mut() {
         let target = match wheel.0 {
-            WheelType::Lift => state.params.lift[3],
-            WheelType::Gamma => state.params.gamma[3],
-            WheelType::Gain => state.params.gain[3],
-            WheelType::Offset => state.params.offset[3],
+            WheelType::Lift => state.params.lift_wheel[3],
+            WheelType::Gamma => state.params.gamma_wheel[3],
+            WheelType::Gain => state.params.gain_wheel[3],
+            WheelType::Offset => state.params.offset_wheel[3],
         };
         if (value.0 - target).abs() > PARAM_SYNC_EPSILON {
             value.0 = target;
@@ -425,10 +425,10 @@ pub fn sync_params_to_wheels(
 
     for (wheel_type, children) in wheels.iter() {
         let channels = match wheel_type {
-            WheelType::Lift => &state.params.lift,
-            WheelType::Gamma => &state.params.gamma,
-            WheelType::Gain => &state.params.gain,
-            WheelType::Offset => &state.params.offset,
+            WheelType::Lift => &state.params.lift_wheel,
+            WheelType::Gamma => &state.params.gamma_wheel,
+            WheelType::Gain => &state.params.gain_wheel,
+            WheelType::Offset => &state.params.offset_wheel,
         };
 
         // Reverse the channel → Vec2 mapping.

@@ -68,10 +68,10 @@ impl GradingParamsGpu {
     /// Convert from the core [`GradingParams`] to the GPU-compatible layout.
     pub fn from_params(params: &GradingParams, use_ocio: bool) -> Self {
         Self {
-            lift: params.lift,
-            gamma: params.gamma,
-            gain: params.gain,
-            offset_val: params.offset,
+            lift: params.combined_lift(),
+            gamma: params.combined_gamma(),
+            gain: params.combined_gain(),
+            offset_val: params.combined_offset(),
             temperature: params.temperature,
             tint: params.tint,
             contrast: params.contrast,

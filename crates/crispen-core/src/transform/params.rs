@@ -147,15 +147,25 @@ pub struct GradingParams {
     /// Color management configuration.
     pub color_management: ColorManagementConfig,
 
-    // Primary Wheels [R, G, B, Master]
-    /// Lift adjustment (shadows). Default: `[0, 0, 0, 0]`.
+    // Primary Bars [R, G, B, Master]
+    /// Lift adjustment from primary bars (shadows). Default: `[0, 0, 0, 0]`.
     pub lift: [f32; 4],
-    /// Gamma adjustment (midtones). Default: `[1, 1, 1, 1]`.
+    /// Gamma adjustment from primary bars (midtones). Default: `[1, 1, 1, 1]`.
     pub gamma: [f32; 4],
-    /// Gain adjustment (highlights). Default: `[1, 1, 1, 1]`.
+    /// Gain adjustment from primary bars (highlights). Default: `[1, 1, 1, 1]`.
     pub gain: [f32; 4],
-    /// Offset adjustment. Default: `[0, 0, 0, 0]`.
+    /// Offset adjustment from primary bars. Default: `[0, 0, 0, 0]`.
     pub offset: [f32; 4],
+
+    // Color Wheel chrominance offsets [R, G, B, Master]
+    /// Lift wheel offset (shadows). Default: `[0, 0, 0, 0]`. Combined additively with `lift`.
+    pub lift_wheel: [f32; 4],
+    /// Gamma wheel offset (midtones). Default: `[1, 1, 1, 1]`. Combined multiplicatively with `gamma`.
+    pub gamma_wheel: [f32; 4],
+    /// Gain wheel offset (highlights). Default: `[1, 1, 1, 1]`. Combined multiplicatively with `gain`.
+    pub gain_wheel: [f32; 4],
+    /// Offset wheel offset. Default: `[0, 0, 0, 0]`. Combined additively with `offset`.
+    pub offset_wheel: [f32; 4],
 
     // Sliders
     /// Color temperature shift. 0.0 = neutral.
@@ -199,6 +209,10 @@ impl Default for GradingParams {
             gamma: [1.0, 1.0, 1.0, 1.0],
             gain: [1.0, 1.0, 1.0, 1.0],
             offset: [0.0, 0.0, 0.0, 0.0],
+            lift_wheel: [0.0, 0.0, 0.0, 0.0],
+            gamma_wheel: [1.0, 1.0, 1.0, 1.0],
+            gain_wheel: [1.0, 1.0, 1.0, 1.0],
+            offset_wheel: [0.0, 0.0, 0.0, 0.0],
             temperature: 0.0,
             tint: 0.0,
             contrast: 1.0,
@@ -214,5 +228,47 @@ impl Default for GradingParams {
             lum_vs_sat: Vec::new(),
             sat_vs_sat: Vec::new(),
         }
+    }
+}
+
+impl GradingParams {
+    /// Combined lift: bar + wheel (additive).
+    pub fn combined_lift(&self) -> [f32; 4] {
+        [
+            self.lift[0] + self.lift_wheel[0],
+            self.lift[1] + self.lift_wheel[1],
+            self.lift[2] + self.lift_wheel[2],
+            self.lift[3] + self.lift_wheel[3],
+        ]
+    }
+
+    /// Combined gamma: bar * wheel (multiplicative).
+    pub fn combined_gamma(&self) -> [f32; 4] {
+        [
+            self.gamma[0] * self.gamma_wheel[0],
+            self.gamma[1] * self.gamma_wheel[1],
+            self.gamma[2] * self.gamma_wheel[2],
+            self.gamma[3] * self.gamma_wheel[3],
+        ]
+    }
+
+    /// Combined gain: bar * wheel (multiplicative).
+    pub fn combined_gain(&self) -> [f32; 4] {
+        [
+            self.gain[0] * self.gain_wheel[0],
+            self.gain[1] * self.gain_wheel[1],
+            self.gain[2] * self.gain_wheel[2],
+            self.gain[3] * self.gain_wheel[3],
+        ]
+    }
+
+    /// Combined offset: bar + wheel (additive).
+    pub fn combined_offset(&self) -> [f32; 4] {
+        [
+            self.offset[0] + self.offset_wheel[0],
+            self.offset[1] + self.offset_wheel[1],
+            self.offset[2] + self.offset_wheel[2],
+            self.offset[3] + self.offset_wheel[3],
+        ]
     }
 }

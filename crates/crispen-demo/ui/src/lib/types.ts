@@ -21,6 +21,10 @@ export interface GradingParams {
   gamma: [number, number, number, number];
   gain: [number, number, number, number];
   offset: [number, number, number, number];
+  lift_wheel: [number, number, number, number];
+  gamma_wheel: [number, number, number, number];
+  gain_wheel: [number, number, number, number];
+  offset_wheel: [number, number, number, number];
   temperature: number;
   tint: number;
   contrast: number;
