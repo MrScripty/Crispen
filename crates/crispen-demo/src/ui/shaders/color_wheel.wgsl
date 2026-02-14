@@ -58,7 +58,7 @@ fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
     // Outer ring: HSV hue wheel.
     if r > RING_INNER - AA {
         let angle = atan2(p.y, p.x);
-        let hue = (angle + PI) / TWO_PI;
+        let hue = fract(angle / TWO_PI);
         let rgb = hsv_to_rgb(hue, 1.0, 0.98);
         // Anti-aliased edges on both sides of the ring.
         let outer_alpha = 1.0 - smoothstep(RING_OUTER - AA, RING_OUTER + AA, r);
@@ -70,7 +70,7 @@ fn fragment(in: UiVertexOutput) -> @location(0) vec4<f32> {
     let inner_alpha = 1.0 - smoothstep(CIRCLE_R - AA, CIRCLE_R + AA, r);
     let radial = clamp(r / CIRCLE_R, 0.0, 1.0);
     let angle = atan2(p.y, p.x);
-    let hue = (angle + PI) / TWO_PI;
+    let hue = fract(angle / TWO_PI);
     let sat = smoothstep(0.08, 1.0, radial) * 0.9;
     let val = 0.22 + (1.0 - radial) * 0.18;
     var color = hsv_to_rgb(hue, sat, val);
