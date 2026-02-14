@@ -59,6 +59,8 @@ pub struct OcioColorManagement {
 pub struct ImageState {
     /// The original source image (None until loaded).
     pub source: Option<GradingImage>,
+    /// File path of the currently loaded image.
+    pub source_path: Option<String>,
 }
 
 /// Raw pixel bytes for the viewer, produced by the GPU pipeline.

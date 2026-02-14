@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 
-/// Default WebSocket port for the IPC bridge.
+/// Default WebSocket port for the IPC bridge (kept for backward compat).
 const DEFAULT_WS_PORT: u16 = 9400;
 /// Default window width.
 const DEFAULT_WIDTH: f32 = 1920.0;
@@ -12,18 +12,18 @@ const DEFAULT_HEIGHT: f32 = 1080.0;
 /// Runtime frontend mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FrontendMode {
-    /// Use the external Svelte UI (WebSocket bridge).
-    Svelte,
-    /// Use the legacy native Bevy UI.
+    /// CEF offscreen compositing (default).
+    Cef,
+    /// Legacy native Bevy UI (no webview).
     BevyNative,
 }
 
 impl FrontendMode {
     fn from_env() -> Self {
-        let raw = std::env::var("CRISPEN_FRONTEND").unwrap_or_else(|_| "svelte".to_string());
+        let raw = std::env::var("CRISPEN_FRONTEND").unwrap_or_else(|_| "cef".to_string());
         match raw.trim().to_ascii_lowercase().as_str() {
             "bevy" | "native" | "native_bevy" => Self::BevyNative,
-            _ => Self::Svelte,
+            _ => Self::Cef,
         }
     }
 }
@@ -31,7 +31,7 @@ impl FrontendMode {
 /// Runtime configuration for the Crispen demo application.
 #[derive(Resource, Clone)]
 pub struct AppConfig {
-    /// WebSocket port for Bevy <-> Svelte IPC.
+    /// WebSocket port (kept for backward compat / fallback).
     pub ws_port: u16,
     /// Window width in logical pixels.
     pub width: f32,

@@ -5,8 +5,9 @@ edition.workspace = true
 license.workspace = true
 
 [features]
-default = ["ocio"]
+default = ["ocio", "cef"]
 ocio = ["crispen-bevy/ocio", "dep:crispen-ocio", "dep:crispen-oiio"]
+cef = ["dep:crispen-frontend-cef", "dep:crispen-frontend-core"]
 
 [dependencies]
 crispen-core = { path = "../crispen-core" }
@@ -14,6 +15,11 @@ crispen-bevy = { path = "../crispen-bevy" }
 crispen-ofx = { path = "../crispen-ofx" }
 crispen-ocio = { path = "../crispen-ocio", optional = true }
 crispen-oiio = { path = "../crispen-oiio", optional = true }
+
+# CEF frontend (optional — falls back to WebSocket bridge without this)
+crispen-frontend-core = { path = "../crispen-frontend-core", optional = true }
+crispen-frontend-cef = { path = "../crispen-frontend-cef", optional = true }
+
 bevy = { workspace = true, features = [
     "bevy_core_pipeline",
     "bevy_render",
@@ -32,7 +38,6 @@ bevy = { workspace = true, features = [
 ] }
 serde = { workspace = true }
 serde_json = { workspace = true }
-wry = { workspace = true }
 tokio = { workspace = true }
 tokio-tungstenite = { workspace = true }
 futures-util = { workspace = true }

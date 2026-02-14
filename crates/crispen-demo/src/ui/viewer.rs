@@ -3,6 +3,11 @@
 //! Displays the graded image as a Bevy `ImageNode` that fills the top
 //! portion of the window. The texture is updated each frame the
 //! `ViewerData` resource changes.
+//!
+//! The GPU pipeline produces linear-light `Rgba16Float` (or `Rgba32Float`)
+//! data.  Bevy's UI image pipeline does not reliably render HDR float
+//! textures through the `ImageNode` compositing path, so we convert to
+//! `Rgba8UnormSrgb` on the CPU before uploading.
 
 use bevy::asset::RenderAssetUsages;
 use bevy::prelude::*;
@@ -24,7 +29,7 @@ pub struct ViewerImageHandle {
     pub handle: Handle<Image>,
 }
 
-/// Create a 1x1 transparent placeholder image and store the handle.
+/// Create a 1x1 black placeholder image and store the handle.
 pub fn setup_viewer(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let placeholder = Image::new_fill(
         Extent3d {
@@ -33,14 +38,101 @@ pub fn setup_viewer(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
-        &[0, 0, 0, 0, 0, 0, 0, 0], // 8 bytes for Rgba16Float
-        TextureFormat::Rgba16Float,
+        &[0, 0, 0, 255], // opaque black, Rgba8UnormSrgb
+        TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
     );
     let handle = images.add(placeholder);
     commands.insert_resource(ViewerImageHandle {
         handle: handle.clone(),
     });
+}
+
+// ── f16 / linear-to-sRGB helpers ──────────────────────────────────
+
+/// Decode an IEEE 754 half-precision float from two little-endian bytes.
+fn f16_to_f32(lo: u8, hi: u8) -> f32 {
+    let bits = u16::from_le_bytes([lo, hi]);
+    let sign = ((bits >> 15) & 1) as u32;
+    let exp = ((bits >> 10) & 0x1F) as u32;
+    let mant = (bits & 0x3FF) as u32;
+
+    if exp == 0 {
+        if mant == 0 {
+            return f32::from_bits(sign << 31); // ±0
+        }
+        // Subnormal — normalise.
+        let mut m = mant;
+        let mut e: i32 = -14;
+        while (m & 0x400) == 0 {
+            m <<= 1;
+            e -= 1;
+        }
+        m &= 0x3FF;
+        let f32_exp = (e + 127) as u32;
+        return f32::from_bits((sign << 31) | (f32_exp << 23) | (m << 13));
+    }
+    if exp == 31 {
+        if mant == 0 {
+            return if sign == 1 {
+                f32::NEG_INFINITY
+            } else {
+                f32::INFINITY
+            };
+        }
+        return f32::NAN;
+    }
+
+    let f32_exp = (exp as i32 - 15 + 127) as u32;
+    f32::from_bits((sign << 31) | (f32_exp << 23) | (mant << 13))
+}
+
+/// Convert a single linear-light channel value to an sRGB-encoded `u8`.
+#[inline]
+fn linear_to_srgb_u8(v: f32) -> u8 {
+    let c = v.clamp(0.0, 1.0);
+    let s = if c <= 0.003_130_8 {
+        12.92 * c
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    };
+    (s * 255.0 + 0.5) as u8
+}
+
+/// Convert an `Rgba16Float` byte buffer to `Rgba8UnormSrgb`.
+fn f16_linear_to_srgb8(src: &[u8], pixel_count: usize) -> Vec<u8> {
+    let mut dst = vec![0u8; pixel_count * 4];
+    for i in 0..pixel_count {
+        let si = i * 8; // 4 channels × 2 bytes
+        let di = i * 4;
+        let r = f16_to_f32(src[si], src[si + 1]);
+        let g = f16_to_f32(src[si + 2], src[si + 3]);
+        let b = f16_to_f32(src[si + 4], src[si + 5]);
+        let a = f16_to_f32(src[si + 6], src[si + 7]);
+        dst[di] = linear_to_srgb_u8(r);
+        dst[di + 1] = linear_to_srgb_u8(g);
+        dst[di + 2] = linear_to_srgb_u8(b);
+        dst[di + 3] = (a.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+    }
+    dst
+}
+
+/// Convert an `Rgba32Float` byte buffer to `Rgba8UnormSrgb`.
+fn f32_linear_to_srgb8(src: &[u8], pixel_count: usize) -> Vec<u8> {
+    let mut dst = vec![0u8; pixel_count * 4];
+    for i in 0..pixel_count {
+        let si = i * 16; // 4 channels × 4 bytes
+        let di = i * 4;
+        let r = f32::from_le_bytes([src[si], src[si + 1], src[si + 2], src[si + 3]]);
+        let g = f32::from_le_bytes([src[si + 4], src[si + 5], src[si + 6], src[si + 7]]);
+        let b = f32::from_le_bytes([src[si + 8], src[si + 9], src[si + 10], src[si + 11]]);
+        let a = f32::from_le_bytes([src[si + 12], src[si + 13], src[si + 14], src[si + 15]]);
+        dst[di] = linear_to_srgb_u8(r);
+        dst[di + 1] = linear_to_srgb_u8(g);
+        dst[di + 2] = linear_to_srgb_u8(b);
+        dst[di + 3] = (a.clamp(0.0, 1.0) * 255.0 + 0.5) as u8;
+    }
+    dst
 }
 
 /// Spawn the top viewer section inside the given parent.
@@ -135,9 +227,9 @@ pub fn spawn_viewer_panel(parent: &mut ChildSpawnerCommands, handle: Handle<Imag
         });
 }
 
-/// When `ViewerData` changes, write the raw pixel bytes directly into the
-/// Bevy `Image` asset. No CPU conversion — data is already f16 or f32
-/// linear-light, and Bevy's renderer handles gamma during compositing.
+/// Convert the GPU pipeline's linear-light pixel data to `Rgba8UnormSrgb`
+/// and upload it to the Bevy `Image` asset referenced by the viewer
+/// `ImageNode`.
 pub fn update_viewer_texture(
     viewer_data: Res<ViewerData>,
     viewer: Option<Res<ViewerImageHandle>>,
@@ -150,22 +242,48 @@ pub fn update_viewer_texture(
         return;
     }
 
+    let pixel_count = (viewer_data.width * viewer_data.height) as usize;
+
+    tracing::info!(
+        "update_viewer_texture: {}x{} format={:?} bytes={} pixels={}",
+        viewer_data.width,
+        viewer_data.height,
+        viewer_data.format,
+        viewer_data.pixel_bytes.len(),
+        pixel_count,
+    );
+
     // Keep the viewer transform's aspect ratio in sync with the loaded image.
     let ar = viewer_data.width as f32 / viewer_data.height as f32;
     if transform.image_aspect_ratio != Some(ar) {
         transform.image_aspect_ratio = Some(ar);
     }
-    let Some(viewer) = viewer else { return };
+    let Some(viewer) = viewer else {
+        tracing::warn!("update_viewer_texture: ViewerImageHandle resource missing");
+        return;
+    };
 
     // Hide the load hint once we have an image.
     for entity in hints.iter() {
         commands.entity(entity).despawn();
     }
 
-    let texture_format = match viewer_data.format {
-        ViewerFormat::F16 => TextureFormat::Rgba16Float,
-        ViewerFormat::F32 => TextureFormat::Rgba32Float,
+    // Convert linear HDR → sRGB u8 on the CPU.
+    let srgb_bytes = match viewer_data.format {
+        ViewerFormat::F16 => f16_linear_to_srgb8(&viewer_data.pixel_bytes, pixel_count),
+        ViewerFormat::F32 => f32_linear_to_srgb8(&viewer_data.pixel_bytes, pixel_count),
     };
+
+    // Log first pixel for diagnostics.
+    if srgb_bytes.len() >= 4 {
+        tracing::debug!(
+            "update_viewer_texture: first pixel sRGB = ({}, {}, {}, {})",
+            srgb_bytes[0],
+            srgb_bytes[1],
+            srgb_bytes[2],
+            srgb_bytes[3],
+        );
+    }
 
     if let Some(existing) = images.get_mut(&viewer.handle) {
         let new_size = Extent3d {
@@ -175,17 +293,22 @@ pub fn update_viewer_texture(
         };
 
         if existing.texture_descriptor.size != new_size
-            || existing.texture_descriptor.format != texture_format
+            || existing.texture_descriptor.format != TextureFormat::Rgba8UnormSrgb
         {
+            tracing::info!(
+                "update_viewer_texture: resizing image to {}x{} Rgba8UnormSrgb",
+                new_size.width,
+                new_size.height,
+            );
             *existing = Image::new(
                 new_size,
                 TextureDimension::D2,
-                viewer_data.pixel_bytes.clone(),
-                texture_format,
+                srgb_bytes,
+                TextureFormat::Rgba8UnormSrgb,
                 RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
             );
         } else {
-            existing.data = Some(viewer_data.pixel_bytes.clone());
+            existing.data = Some(srgb_bytes);
         }
     } else {
         tracing::warn!("viewer Image asset not found for handle");

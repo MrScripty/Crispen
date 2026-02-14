@@ -271,6 +271,7 @@ fn load_image_from_path(
     }
 
     image_state.source = Some(image);
+    image_state.source_path = Some(path.display().to_string());
     grading_state.dirty = true;
 
     #[cfg(feature = "ocio")]
@@ -287,6 +288,7 @@ fn load_image_from_path(
     }
 
     image_loaded.write(ImageLoadedEvent {
+        path: path.display().to_string(),
         width,
         height,
         bit_depth,

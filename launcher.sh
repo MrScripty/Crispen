@@ -14,6 +14,7 @@ BUILD_ONLY=false
 RUN_ONLY=false
 RELEASE=false
 DEV_MODE=false
+NO_CEF=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -33,6 +34,10 @@ while [[ $# -gt 0 ]]; do
             DEV_MODE=true
             shift
             ;;
+        --no-cef)
+            NO_CEF=true
+            shift
+            ;;
         --help|-h)
             echo "Crispen Launcher"
             echo ""
@@ -43,9 +48,10 @@ while [[ $# -gt 0 ]]; do
             echo "  --run       Run only (skip build, use existing binary)"
             echo "  --release   Build and run in release mode"
             echo "  --dev       Development mode (Vite dev server for UI hot-reload)"
+            echo "  --no-cef    Disable CEF (use WebSocket bridge fallback)"
             echo "  --help, -h  Show this help message"
             echo ""
-            echo "With no options, builds everything and runs in debug mode."
+            echo "With no options, builds everything and runs in debug mode with CEF."
             exit 0
             ;;
         *)
@@ -56,11 +62,22 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Resolve binary path
+# Resolve build type
 if [ "$RELEASE" = true ]; then
+    BUILD_TYPE="release"
     BINARY="target/release/crispen-demo"
+    HELPER_BINARY="target/release/crispen-cef-helper"
 else
+    BUILD_TYPE="debug"
     BINARY="target/debug/crispen-demo"
+    HELPER_BINARY="target/debug/crispen-cef-helper"
+fi
+
+# Resolve cargo features
+if [ "$NO_CEF" = true ]; then
+    CARGO_FEATURES="--no-default-features --features ocio"
+else
+    CARGO_FEATURES=""  # default features include cef
 fi
 
 # --- Build ---
@@ -80,9 +97,15 @@ if [ "$RUN_ONLY" = false ]; then
     # Build Rust workspace
     echo "Building Crispen..."
     if [ "$RELEASE" = true ]; then
-        cargo build --release -p crispen-demo
+        cargo build --release -p crispen-demo $CARGO_FEATURES
+        if [ "$NO_CEF" = false ]; then
+            cargo build --release -p crispen-cef-helper
+        fi
     else
-        cargo build -p crispen-demo
+        cargo build -p crispen-demo $CARGO_FEATURES
+        if [ "$NO_CEF" = false ]; then
+            cargo build -p crispen-cef-helper
+        fi
     fi
 fi
 
@@ -104,6 +127,25 @@ if [ "$DEV_MODE" = true ]; then
     export CRISPEN_DEV=1
     echo "(Development mode — UI served from Vite dev server)"
     echo "Start Vite in another terminal: cd $UI_DIR && npm run dev"
+fi
+
+# Set up CEF library path
+if [ "$NO_CEF" = false ]; then
+    # Find libcef.so from the cef-dll-sys build output
+    CEF_LIB_DIR=$(find "target/$BUILD_TYPE/build" -type d -name "cef_linux_x86_64" 2>/dev/null | head -1)
+    if [ -n "$CEF_LIB_DIR" ] && [ -f "$CEF_LIB_DIR/libcef.so" ]; then
+        export LD_LIBRARY_PATH="$CEF_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+        echo "CEF libraries: $CEF_LIB_DIR"
+    else
+        echo "Warning: libcef.so not found in build output."
+        echo "The cef crate should download it automatically during build."
+        echo "Try rebuilding: ./launcher.sh"
+    fi
+
+    # Ensure helper binary is discoverable (same dir as main binary or via env)
+    if [ -f "$HELPER_BINARY" ]; then
+        export CEF_HELPER_PATH="$SCRIPT_DIR/$HELPER_BINARY"
+    fi
 fi
 
 exec "$BINARY"

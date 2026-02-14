@@ -1,11 +1,18 @@
 //! Crispen Demo — standalone color grading application.
 //!
-//! Uses Bevy's native UI widgets for a DaVinci Resolve-style interface
-//! with the Crispen grading pipeline and WebSocket IPC bridge.
+//! Uses CEF offscreen compositing for the Svelte UI with Bevy-rendered
+//! GPU widgets (color wheels, scopes, curves, viewer).
 
+#[cfg(feature = "cef")]
+mod cef_bridge;
 mod config;
+mod embedded_ui;
 mod image_loader;
+#[cfg(feature = "cef")]
+mod input;
 mod ipc;
+#[cfg(feature = "cef")]
+mod layout_sync;
 mod ocio_support;
 mod ui;
 mod ws_bridge;
@@ -16,27 +23,22 @@ use bevy::window::WindowResolution;
 
 use config::{AppConfig, FrontendMode};
 use crispen_bevy::CrispenPlugin;
-use crispen_bevy::events::{ParamsUpdatedEvent, ScopeDataReadyEvent};
+use crispen_bevy::events::{ImageLoadedEvent, ParamsUpdatedEvent, ScopeDataReadyEvent};
 #[cfg(feature = "ocio")]
 use crispen_bevy::resources::OcioColorManagement;
 use crispen_bevy::resources::{GradingState, ScopeState};
 #[cfg(feature = "ocio")]
 use crispen_ocio::OcioConfig;
-use ws_bridge::{OutboundUiMessages, WsBridge};
 
 fn main() {
     let config = AppConfig::default();
     tracing::info!(
-        "starting demo: {}x{}, ws_port={}, dev_mode={}, frontend={:?}",
+        "starting demo: {}x{}, dev_mode={}, frontend={:?}",
         config.width,
         config.height,
-        config.ws_port,
         config.dev_mode,
         config.frontend_mode
     );
-
-    // Spawn WebSocket IPC server
-    let (outbound_tx, inbound_rx) = ws_bridge::spawn_ws_server(config.ws_port);
 
     let window = Window {
         title: "Crispen".into(),
@@ -50,11 +52,6 @@ fn main() {
     let frontend_mode = config.frontend_mode;
 
     app.insert_resource(config)
-        .insert_resource(OutboundUiMessages::default())
-        .insert_resource(WsBridge {
-            outbound_tx,
-            inbound_rx,
-        })
         .add_plugins(
             DefaultPlugins
                 .set(WindowPlugin {
@@ -66,26 +63,63 @@ fn main() {
                     ..default()
                 }),
         )
-        .add_plugins(CrispenPlugin)
-        .add_systems(Startup, send_initial_state)
-        .add_systems(
-            Update,
-            (
-                ws_bridge::poll_inbound_messages,
-                ws_bridge::flush_outbound_messages,
-                forward_params_to_ui,
-                forward_scopes_to_ui,
-            ),
-        );
+        .add_plugins(CrispenPlugin);
 
-    app.add_plugins(InputDispatchPlugin)
-        .add_plugins(bevy::ui_widgets::UiWidgetsPlugins)
-        .add_plugins(ui::CrispenUiPlugin);
+    // ── Frontend mode ────────────────────────────────────────────
+    match frontend_mode {
+        #[cfg(feature = "cef")]
+        FrontendMode::Cef => {
+            app.add_plugins(cef_bridge::CefBridgePlugin)
+                .add_plugins(input::InputForwardingPlugin)
+                .add_plugins(layout_sync::LayoutSyncPlugin)
+                .add_plugins(InputDispatchPlugin)
+                .init_resource::<ui::viewer_nav::ViewerTransform>()
+                .add_systems(
+                    Startup,
+                    (
+                        ui::setup_ui_camera,
+                        ui::viewer::setup_viewer,
+                        spawn_cef_viewer_panel,
+                        send_initial_state,
+                    )
+                        .chain(),
+                )
+                .add_systems(
+                    Update,
+                    (
+                        forward_params_to_ui,
+                        forward_scopes_to_ui,
+                        forward_image_loaded_to_ui,
+                        ui::systems::handle_load_image_shortcut,
+                        ui::viewer::update_viewer_texture
+                            .after(crispen_bevy::systems::consume_gpu_results),
+                    ),
+                );
+        }
+        _ => {
+            // Legacy WebSocket bridge fallback.
+            let (outbound_tx, inbound_rx) = ws_bridge::spawn_ws_server(
+                app.world().resource::<AppConfig>().ws_port,
+            );
+            app.insert_resource(ws_bridge::OutboundUiMessages::default())
+                .insert_resource(ws_bridge::WsBridge { outbound_tx, inbound_rx })
+                .add_systems(Startup, send_initial_state)
+                .add_systems(
+                    Update,
+                    (
+                        ws_bridge::poll_inbound_messages,
+                        ws_bridge::flush_outbound_messages,
+                        forward_params_to_ui,
+                        forward_scopes_to_ui,
+                        forward_image_loaded_to_ui,
+                    ),
+                );
 
-    if frontend_mode == FrontendMode::Svelte {
-        tracing::info!(
-            "Svelte frontend mode enabled; keeping native in-window layout as fallback until embedded webview lands"
-        );
+            // Full native Bevy UI (layout, toolbar, widgets).
+            app.add_plugins(InputDispatchPlugin)
+                .add_plugins(bevy::ui_widgets::UiWidgetsPlugins)
+                .add_plugins(ui::CrispenUiPlugin);
+        }
     }
 
     #[cfg(feature = "ocio")]
@@ -147,7 +181,6 @@ fn try_insert_ocio_resource(app: &mut App) {
     tracing::info!("OCIO enabled");
 }
 
-/// Infer the display OETF from the OCIO display name.
 #[cfg(feature = "ocio")]
 fn infer_display_oetf(display_name: &str) -> crispen_core::transform::params::DisplayOetf {
     use crispen_core::transform::params::DisplayOetf;
@@ -157,27 +190,100 @@ fn infer_display_oetf(display_name: &str) -> crispen_core::transform::params::Di
     } else if lower.contains("hlg") {
         DisplayOetf::Hlg
     } else {
-        // sRGB, P3, Rec.709, and most SDR displays use the sRGB OETF.
         DisplayOetf::Srgb
     }
 }
 
-/// Send initial state to the UI when the app starts.
-fn send_initial_state(state: Res<GradingState>, mut outbound: ResMut<OutboundUiMessages>) {
-    outbound.send(ipc::BevyToUi::Initialize {
-        params: state.params.clone(),
-    });
+/// Spawn a viewer `ImageNode` in CEF mode, positioned by `LayoutSyncPlugin`.
+///
+/// The Svelte dockview marks `"viewer"` as a Bevy panel (transparent in CEF),
+/// so this entity shows through the overlay once layout_sync receives the
+/// `LayoutUpdate` with the viewer region.
+#[cfg(feature = "cef")]
+fn spawn_cef_viewer_panel(
+    mut commands: Commands,
+    viewer_handle: Res<ui::viewer::ViewerImageHandle>,
+) {
+    commands.spawn((
+        layout_sync::LayoutPanel {
+            panel_id: "viewer".into(),
+        },
+        ImageNode::new(viewer_handle.handle.clone()).with_mode(NodeImageMode::Stretch),
+        Node {
+            position_type: PositionType::Absolute,
+            ..default()
+        },
+        // Render above the CEF overlay so the Bevy texture is visible through
+        // the transparent cutout in the dockview panel.
+        GlobalZIndex(i32::MAX),
+        Visibility::Hidden,
+    ));
 }
 
-/// Forward `ParamsUpdatedEvent` to the UI via WebSocket.
+/// Send initial state to the UI when the app starts.
+fn send_initial_state(
+    state: Res<GradingState>,
+    #[cfg(feature = "cef")] mut cef_outbound: Option<ResMut<cef_bridge::OutboundUiMessages>>,
+    #[cfg(not(feature = "cef"))] mut ws_outbound: ResMut<ws_bridge::OutboundUiMessages>,
+) {
+    let msg = ipc::BevyToUi::Initialize {
+        params: state.params.clone(),
+    };
+
+    #[cfg(feature = "cef")]
+    if let Some(ref mut out) = cef_outbound {
+        out.send(msg);
+        return;
+    }
+
+    #[cfg(not(feature = "cef"))]
+    ws_outbound.send(msg);
+}
+
+/// Forward `ParamsUpdatedEvent` to the UI.
 fn forward_params_to_ui(
     mut events: MessageReader<ParamsUpdatedEvent>,
-    mut outbound: ResMut<OutboundUiMessages>,
+    #[cfg(feature = "cef")] mut cef_outbound: Option<ResMut<cef_bridge::OutboundUiMessages>>,
+    #[cfg(not(feature = "cef"))] mut ws_outbound: ResMut<ws_bridge::OutboundUiMessages>,
 ) {
     for event in events.read() {
-        outbound.send(ipc::BevyToUi::ParamsUpdated {
+        let msg = ipc::BevyToUi::ParamsUpdated {
             params: event.params.clone(),
-        });
+        };
+
+        #[cfg(feature = "cef")]
+        if let Some(ref mut out) = cef_outbound {
+            out.send(msg);
+            continue;
+        }
+
+        #[cfg(not(feature = "cef"))]
+        ws_outbound.send(msg);
+    }
+}
+
+/// Forward `ImageLoadedEvent` to the UI.
+fn forward_image_loaded_to_ui(
+    mut events: MessageReader<ImageLoadedEvent>,
+    #[cfg(feature = "cef")] mut cef_outbound: Option<ResMut<cef_bridge::OutboundUiMessages>>,
+    #[cfg(not(feature = "cef"))] mut ws_outbound: ResMut<ws_bridge::OutboundUiMessages>,
+) {
+    for event in events.read() {
+        let msg = ipc::BevyToUi::ImageLoaded {
+            path: event.path.clone(),
+            width: event.width,
+            height: event.height,
+            bit_depth: event.bit_depth.clone(),
+        };
+
+        #[cfg(feature = "cef")]
+        if let Some(ref mut out) = cef_outbound {
+            out.send(msg);
+            continue;
+        }
+
+        #[cfg(not(feature = "cef"))]
+        ws_outbound.send(msg);
     }
 }
 
@@ -185,7 +291,8 @@ fn forward_params_to_ui(
 fn forward_scopes_to_ui(
     mut events: MessageReader<ScopeDataReadyEvent>,
     scope_state: Res<ScopeState>,
-    mut outbound: ResMut<OutboundUiMessages>,
+    #[cfg(feature = "cef")] mut cef_outbound: Option<ResMut<cef_bridge::OutboundUiMessages>>,
+    #[cfg(not(feature = "cef"))] mut ws_outbound: ResMut<ws_bridge::OutboundUiMessages>,
 ) {
     for _ in events.read() {
         if let (Some(h), Some(w), Some(v), Some(c)) = (
@@ -194,12 +301,21 @@ fn forward_scopes_to_ui(
             scope_state.vectorscope.clone(),
             scope_state.cie.clone(),
         ) {
-            outbound.send(ipc::BevyToUi::ScopeData {
+            let msg = ipc::BevyToUi::ScopeData {
                 histogram: h,
                 waveform: w,
                 vectorscope: v,
                 cie: c,
-            });
+            };
+
+            #[cfg(feature = "cef")]
+            if let Some(ref mut out) = cef_outbound {
+                out.send(msg);
+                continue;
+            }
+
+            #[cfg(not(feature = "cef"))]
+            ws_outbound.send(msg);
         }
     }
 }

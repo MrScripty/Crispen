@@ -37,6 +37,8 @@ pub struct ParamsUpdatedEvent {
 /// Fired when a new image is loaded into the grading pipeline.
 #[derive(Message)]
 pub struct ImageLoadedEvent {
+    /// File path of the loaded image.
+    pub path: String,
     /// Width of the loaded image.
     pub width: u32,
     /// Height of the loaded image.

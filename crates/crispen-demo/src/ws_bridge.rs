@@ -212,6 +212,7 @@ fn dispatch_ui_message(
             });
             if let Some(source) = images.source.as_ref() {
                 outbound.send(BevyToUi::ImageLoaded {
+                    path: images.source_path.clone().unwrap_or_default(),
                     width: source.width,
                     height: source.height,
                     bit_depth: format!("{:?}", source.source_bit_depth),
@@ -255,6 +256,8 @@ fn dispatch_ui_message(
                 visible,
             });
         }
+        // CEF-only messages — ignored on the WebSocket bridge.
+        UiToBevy::UiDirty | UiToBevy::LayoutUpdate { .. } | UiToBevy::SaveLayout { .. } => {}
     }
 }
 
@@ -290,6 +293,7 @@ fn handle_load_image(
             }
 
             images.source = Some(img);
+            images.source_path = Some(path.to_string());
             state.dirty = true;
 
             #[cfg(feature = "ocio")]
@@ -307,11 +311,13 @@ fn handle_load_image(
             }
 
             image_loaded.write(ImageLoadedEvent {
+                path: path.to_string(),
                 width,
                 height,
                 bit_depth: bit_depth.clone(),
             });
             outbound.send(BevyToUi::ImageLoaded {
+                path: path.to_string(),
                 width,
                 height,
                 bit_depth,

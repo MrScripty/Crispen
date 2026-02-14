@@ -1,10 +1,11 @@
-//! Embedded UI HTML content for the wry webview.
+//! Embedded UI HTML content for the CEF webview.
 //!
-//! In development mode (`CRISPEN_DEV=1`), loads from the Vite dev server.
-//! In release mode, serves a placeholder until the UI is built and embedded.
+//! In development mode (`CRISPEN_DEV=1`), CEF navigates directly to the Vite
+//! dev server.  In release mode, HTML is loaded via a `data:` URL (the built
+//! Svelte assets will be embedded later).
 
 /// Vite dev server port (must match `ui/vite.config.ts`).
-const VITE_DEV_PORT: u16 = 5174;
+pub const VITE_DEV_PORT: u16 = 5174;
 
 /// Get HTML content for the webview.
 pub fn get_html(dev_mode: bool, ws_port: u16) -> String {

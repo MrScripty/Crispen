@@ -1,7 +1,7 @@
 //! IPC message contracts between the Bevy backend and the Svelte UI.
 //!
 //! These enums define the complete set of messages exchanged over the
-//! WebSocket bridge. They follow the `#[serde(tag = "type", content = "data")]`
+//! CEF IPC bridge. They follow the `#[serde(tag = "type", content = "data")]`
 //! pattern from Pentimento for consistent serialization.
 
 use serde::{Deserialize, Serialize};
@@ -39,6 +39,8 @@ pub enum BevyToUi {
 
     /// A new image was loaded successfully.
     ImageLoaded {
+        /// File path of the loaded image.
+        path: String,
         /// Image width in pixels.
         width: u32,
         /// Image height in pixels.
@@ -102,4 +104,36 @@ pub enum UiToBevy {
         /// Whether to show or hide the scope.
         visible: bool,
     },
+
+    /// CEF dirty signal — triggers framebuffer recapture.
+    UiDirty,
+
+    /// Dockview panel layout changed.
+    LayoutUpdate {
+        /// Current panel positions and sizes.
+        regions: Vec<LayoutRegion>,
+    },
+
+    /// Persist the dockview layout to disk.
+    SaveLayout {
+        /// Serialised dockview JSON.
+        layout_json: String,
+    },
+}
+
+/// A rectangular region where Bevy should render a widget.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LayoutRegion {
+    /// Unique panel identifier (e.g. `"viewer"`, `"color-wheels"`).
+    pub id: String,
+    /// X position in CSS pixels.
+    pub x: f32,
+    /// Y position in CSS pixels.
+    pub y: f32,
+    /// Width in CSS pixels.
+    pub width: f32,
+    /// Height in CSS pixels.
+    pub height: f32,
+    /// Whether the panel is visible.
+    pub visible: bool,
 }

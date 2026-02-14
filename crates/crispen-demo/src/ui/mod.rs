@@ -93,8 +93,15 @@ impl Plugin for CrispenUiPlugin {
     }
 }
 
-fn setup_ui_camera(mut commands: Commands) {
-    commands.spawn((Camera2d, IsDefaultUiCamera));
+pub fn setup_ui_camera(mut commands: Commands) {
+    commands.spawn((
+        Camera2d,
+        Camera {
+            clear_color: ClearColorConfig::Custom(Color::srgb(0.102, 0.102, 0.102)),
+            ..default()
+        },
+        IsDefaultUiCamera,
+    ));
 }
 
 fn log_ui_spawn_counts(
