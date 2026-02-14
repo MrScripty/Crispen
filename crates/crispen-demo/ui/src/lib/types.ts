@@ -59,6 +59,17 @@ export interface CieData {
   density: number[];
 }
 
+// -- Layout --
+
+export interface LayoutRegion {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  visible: boolean;
+}
+
 // -- IPC messages (tag + content pattern) --
 
 export type BevyToUi =
@@ -73,7 +84,7 @@ export type BevyToUi =
         cie: CieData;
       };
     }
-  | { type: 'ImageLoaded'; data: { width: number; height: number; bit_depth: string } }
+  | { type: 'ImageLoaded'; data: { path: string; width: number; height: number; bit_depth: string } }
   | { type: 'Error'; data: { message: string } };
 
 export type UiToBevy =
@@ -84,4 +95,7 @@ export type UiToBevy =
   | { type: 'LoadImage'; data: { path: string } }
   | { type: 'LoadLut'; data: { path: string; slot: string } }
   | { type: 'ExportLut'; data: { path: string; size: number } }
-  | { type: 'ToggleScope'; data: { scope_type: string; visible: boolean } };
+  | { type: 'ToggleScope'; data: { scope_type: string; visible: boolean } }
+  | { type: 'UiDirty' }
+  | { type: 'LayoutUpdate'; data: { regions: LayoutRegion[] } }
+  | { type: 'SaveLayout'; data: { layout_json: string } };

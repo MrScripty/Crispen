@@ -1,0 +1,39 @@
+/* Crispen dark theme for dockview-core */
+
+:root {
+  --dv-background-color: transparent;
+  --dv-paneview-header-border-color: #333;
+  --dv-tabs-and-actions-container-background-color: #252525;
+  --dv-activegroup-visiblepanel-tab-background-color: #3a3a3a;
+  --dv-activegroup-hiddenpanel-tab-background-color: #252525;
+  --dv-inactivegroup-visiblepanel-tab-background-color: #333;
+  --dv-inactivegroup-hiddenpanel-tab-background-color: #252525;
+  --dv-tab-divider-color: #444;
+  --dv-activegroup-visiblepanel-tab-color: #e0e0e0;
+  --dv-activegroup-hiddenpanel-tab-color: #888;
+  --dv-inactivegroup-visiblepanel-tab-color: #aaa;
+  --dv-inactivegroup-hiddenpanel-tab-color: #666;
+  --dv-separator-border: #333;
+  --dv-group-view-background-color: transparent;
+  --dv-tabs-container-scrollbar-color: #555;
+  --dv-icon-hover-background-color: rgba(242, 140, 24, 0.3);
+  --dv-floating-box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --dv-drag-over-background-color: rgba(242, 140, 24, 0.15);
+  --dv-drag-over-border-color: rgba(242, 140, 24, 0.5);
+}
+
+.dv-resize-handle-horizontal,
+.dv-resize-handle-vertical {
+  background: #333;
+}
+
+.dv-resize-handle-horizontal:hover,
+.dv-resize-handle-vertical:hover {
+  background: rgba(242, 140, 24, 0.5);
+}
+
+.dv-default-tab {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  padding: 4px 12px;
+}
