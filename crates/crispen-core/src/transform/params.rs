@@ -107,6 +107,11 @@ impl DisplayOetf {
             Self::Hlg => 3,
         }
     }
+
+    /// Default for serde deserialization when the field is absent.
+    fn default_srgb() -> Self {
+        Self::Srgb
+    }
 }
 
 /// Configuration for color space transforms in the grading pipeline.
@@ -120,6 +125,7 @@ pub struct ColorManagementConfig {
     /// values in this gamut; Bevy's sRGB framebuffer applies the final OETF.
     pub output_space: ColorSpaceId,
     /// Display OETF to invert when using OCIO ODT output.
+    #[serde(default = "DisplayOetf::default_srgb")]
     pub display_oetf: DisplayOetf,
 }
 

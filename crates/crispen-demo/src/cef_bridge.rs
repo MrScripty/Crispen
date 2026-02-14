@@ -39,7 +39,11 @@ impl Plugin for CefBridgePlugin {
                 (
                     update_cef_texture,
                     handle_cef_resize,
-                    handle_cef_ipc,
+                    // Run before handle_grading_commands so that any remaining
+                    // ColorGradingCommand messages (AutoBalance, ToggleScope, etc.)
+                    // are written before they are consumed.
+                    handle_cef_ipc
+                        .before(crispen_bevy::systems::handle_grading_commands),
                     flush_outbound_messages,
                 ),
             );
@@ -262,20 +266,23 @@ fn handle_cef_ipc(
     while let Some(json) = wv.backend.try_recv_from_ui() {
         let preview_size = preview_target_from_config(&config);
         match serde_json::from_str::<UiToBevy>(&json) {
-            Ok(msg) => dispatch_ui_message(
-                msg,
-                preview_size,
-                &mut commands,
-                &mut images,
-                gpu.as_deref_mut(),
-                #[cfg(feature = "ocio")]
-                ocio.as_deref_mut(),
-                &mut state,
-                &mut outbound,
-                &mut image_loaded,
-                &mut panel_layout,
-            ),
-            Err(e) => tracing::warn!("failed to parse UI message: {e}"),
+            Ok(msg) => {
+                tracing::debug!("CEF IPC received: {:?}", std::mem::discriminant(&msg));
+                dispatch_ui_message(
+                    msg,
+                    preview_size,
+                    &mut commands,
+                    &mut images,
+                    gpu.as_deref_mut(),
+                    #[cfg(feature = "ocio")]
+                    ocio.as_deref_mut(),
+                    &mut state,
+                    &mut outbound,
+                    &mut image_loaded,
+                    &mut panel_layout,
+                );
+            }
+            Err(e) => tracing::warn!("failed to parse UI message: {e}\n  json: {json}"),
         }
     }
 }
@@ -327,13 +334,31 @@ fn dispatch_ui_message(
             }
         }
         UiToBevy::SetParams { params } => {
-            commands.write(ColorGradingCommand::SetParams { params });
+            // Handle directly rather than routing through ColorGradingCommand
+            // messages, which can be lost if handle_grading_commands runs before
+            // handle_cef_ipc in the same frame.
+            if state.params != params {
+                tracing::info!(
+                    "SetParams: updating grading state (lift={:?}, gamma={:?}, gain={:?}, offset={:?})",
+                    params.lift, params.gamma, params.gain, params.offset
+                );
+                state.params = params.clone();
+                state.dirty = true;
+                outbound.send(BevyToUi::ParamsUpdated { params });
+            }
         }
         UiToBevy::AutoBalance => {
             commands.write(ColorGradingCommand::AutoBalance);
         }
         UiToBevy::ResetGrade => {
-            commands.write(ColorGradingCommand::ResetGrade);
+            // Handle directly to avoid command ordering issues.
+            let defaults = crispen_core::transform::params::GradingParams::default();
+            if state.params != defaults {
+                tracing::info!("ResetGrade: resetting to defaults");
+                state.params = defaults.clone();
+                state.dirty = true;
+                outbound.send(BevyToUi::ParamsUpdated { params: defaults });
+            }
         }
         UiToBevy::LoadImage { path } => {
             handle_load_image(
