@@ -250,6 +250,7 @@ pub fn spawn_scope_header(parent: &mut ChildSpawnerCommands) {
                                         ..default()
                                     },
                                     TextColor(theme::TEXT_PRIMARY),
+                                    Pickable::IGNORE,
                                 )],
                             ));
                         }

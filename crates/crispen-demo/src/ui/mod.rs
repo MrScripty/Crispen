@@ -61,9 +61,11 @@ impl Plugin for CrispenUiPlugin {
                     systems::sync_params_to_wheels,
                     systems::sync_params_to_master_sliders,
                 )
-                    .chain(),
+                    .chain()
+                    .before(crispen_bevy::systems::submit_gpu_work),
                 dial::update_dial_visuals,
-                viewer::update_viewer_texture,
+                viewer::update_viewer_texture
+                    .after(crispen_bevy::systems::consume_gpu_results),
                 split_viewer::update_source_texture,
                 split_viewer::toggle_split_view,
                 toolbar::handle_toolbar_interactions,
@@ -74,7 +76,8 @@ impl Plugin for CrispenUiPlugin {
                 ofx_panel::toggle_ofx_panel,
                 vectorscope::handle_scope_dropdown_interactions,
                 vectorscope::sync_scope_dropdown_ui,
-                vectorscope::update_scope_texture,
+                vectorscope::update_scope_texture
+                    .after(crispen_bevy::systems::consume_gpu_results),
                 systems::handle_load_image_shortcut,
                 viewer_nav::handle_viewer_scroll,
                 viewer_nav::reset_viewer_transform,

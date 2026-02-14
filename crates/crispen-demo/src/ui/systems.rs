@@ -75,6 +75,12 @@ pub fn sync_dials_to_params(
     for (value, dial) in dials.iter() {
         let current = read_param(&state, dial.0);
         if (current - value.0).abs() > PARAM_SYNC_EPSILON {
+            tracing::info!(
+                "sync_dials_to_params: {:?} {} -> {}",
+                dial.0,
+                current,
+                value.0,
+            );
             write_param(&mut state, dial.0, value.0);
             state.dirty = true;
         }
@@ -94,12 +100,23 @@ pub fn on_wheel_value_change(
     mut state: ResMut<GradingState>,
 ) {
     let Ok(wheel_type) = wheels.get(event.source) else {
+        tracing::warn!(
+            "on_wheel_value_change: source entity {:?} has no WheelType",
+            event.source
+        );
         return;
     };
 
     // Map 0..1 UI space to -1..1 offset space.
     let dx = (event.value.x - 0.5) * 2.0;
     let dy = (event.value.y - 0.5) * 2.0;
+
+    tracing::info!(
+        "on_wheel_value_change: {:?} dx={:.3} dy={:.3}",
+        wheel_type,
+        dx,
+        dy,
+    );
 
     let channels = match wheel_type {
         WheelType::Lift | WheelType::Offset => {
@@ -329,6 +346,12 @@ pub fn sync_master_sliders_to_params(
             WheelType::Offset => state.params.offset[3],
         };
         if (current_master - value.0).abs() > PARAM_SYNC_EPSILON {
+            tracing::info!(
+                "sync_master_sliders_to_params: {:?} master {} -> {}",
+                wheel.0,
+                current_master,
+                value.0,
+            );
             match wheel.0 {
                 WheelType::Lift => state.params.lift[3] = value.0,
                 WheelType::Gamma => state.params.gamma[3] = value.0,

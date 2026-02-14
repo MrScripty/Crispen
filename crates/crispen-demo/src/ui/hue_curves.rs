@@ -11,6 +11,10 @@ use crispen_bevy::resources::GradingState;
 
 use super::theme;
 
+/// Hint text shown when the curve plot has no control points.
+#[derive(Component)]
+struct CurveHintText;
+
 const CURVE_TRACE_SAMPLES: usize = 84;
 const CURVE_THUMB_SIZE: f32 = 8.0;
 
@@ -202,6 +206,7 @@ fn spawn_curve_mode_tabs(section: &mut ChildSpawnerCommands) {
                             ..default()
                         },
                         TextColor(theme::TEXT_DIM),
+                        Pickable::IGNORE,
                     )],
                 ));
             }
@@ -230,6 +235,26 @@ fn spawn_curve_plot(section: &mut ChildSpawnerCommands) {
             spawn_neutral_line(plot);
             spawn_curve_trace(plot);
             spawn_hue_markers(plot);
+
+            // Hint text shown until the user adds a control point.
+            plot.spawn((
+                CurveHintText,
+                Node {
+                    position_type: PositionType::Absolute,
+                    width: Val::Percent(100.0),
+                    height: Val::Percent(100.0),
+                    justify_content: JustifyContent::Center,
+                    align_items: AlignItems::Center,
+                    ..default()
+                },
+                Text::new("Ctrl+Click to add points"),
+                TextFont {
+                    font_size: theme::FONT_SIZE_LABEL,
+                    ..default()
+                },
+                TextColor(theme::TEXT_DIM),
+                Pickable::IGNORE,
+            ));
         });
 }
 
@@ -691,6 +716,12 @@ fn sync_hue_curves_to_grading_params(
     }
 
     if changed {
+        tracing::info!(
+            "sync_hue_curves_to_grading_params: curves changed (hvh={}, hvs={}, lvs={})",
+            curves.hue_vs_hue.len(),
+            curves.hue_vs_sat.len(),
+            curves.lum_vs_sat.len(),
+        );
         grading.dirty = true;
     }
 }
@@ -714,11 +745,21 @@ fn sync_curve_visuals(
         (&HueCurveTraceSample, &mut Node),
         (With<HueCurveTraceSample>, Without<HueCurveThumb>),
     >,
+    mut hints: Query<&mut Visibility, With<CurveHintText>>,
 ) {
     let Some(plot_entity) = q_plot.iter().next() else {
         return;
     };
     let active_points = state.active_points();
+
+    // Show/hide the "Ctrl+Click" hint depending on whether points exist.
+    for mut vis in hints.iter_mut() {
+        *vis = if active_points.is_empty() {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        };
+    }
     let mut present_ids = Vec::with_capacity(active_points.len());
 
     for (entity, thumb, drag_state, mut node, mut bg) in thumbs.iter_mut() {

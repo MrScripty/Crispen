@@ -192,6 +192,7 @@ pub fn submit_gpu_work(
     }
 
     let Some(mut gpu) = gpu else {
+        tracing::warn!("submit_gpu_work: dirty but no GPU pipeline — discarding");
         state.dirty = false;
         return;
     };
@@ -199,6 +200,7 @@ pub fn submit_gpu_work(
     let gpu = &mut *gpu;
 
     let Some(ref source_handle) = gpu.source_handle else {
+        tracing::debug!("submit_gpu_work: dirty but no source image — waiting");
         state.dirty = false;
         return;
     };
