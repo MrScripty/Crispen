@@ -23,10 +23,10 @@ use bevy::window::WindowResolution;
 
 use config::{AppConfig, FrontendMode};
 use crispen_bevy::CrispenPlugin;
-use crispen_bevy::events::{ImageLoadedEvent, ParamsUpdatedEvent, ScopeDataReadyEvent};
+use crispen_bevy::events::{ImageLoadedEvent, ParamsUpdatedEvent};
 #[cfg(feature = "ocio")]
 use crispen_bevy::resources::OcioColorManagement;
-use crispen_bevy::resources::{GradingState, ScopeState};
+use crispen_bevy::resources::GradingState;
 #[cfg(feature = "ocio")]
 use crispen_ocio::OcioConfig;
 
@@ -79,7 +79,9 @@ fn main() {
                     (
                         ui::setup_ui_camera,
                         ui::viewer::setup_viewer,
+                        ui::vectorscope::setup_cef_scopes,
                         spawn_cef_viewer_panel,
+                        spawn_cef_scope_panel,
                         send_initial_state,
                     )
                         .chain(),
@@ -88,10 +90,11 @@ fn main() {
                     Update,
                     (
                         forward_params_to_ui,
-                        forward_scopes_to_ui,
                         forward_image_loaded_to_ui,
                         ui::systems::handle_load_image_shortcut,
                         ui::viewer::update_viewer_texture
+                            .after(crispen_bevy::systems::consume_gpu_results),
+                        ui::vectorscope::update_cef_scopes
                             .after(crispen_bevy::systems::consume_gpu_results),
                     ),
                 );
@@ -220,6 +223,83 @@ fn spawn_cef_viewer_panel(
     ));
 }
 
+/// Spawn the multi-scope panel in CEF mode, positioned by `LayoutSyncPlugin`.
+///
+/// Contains all four scope images (vectorscope, waveform, histogram, CIE)
+/// in a scrollable vertical column. Each scope maintains its natural aspect
+/// ratio: vectorscope and CIE are 1:1, waveform and histogram fill the width.
+#[cfg(feature = "cef")]
+fn spawn_cef_scope_panel(
+    mut commands: Commands,
+    handles: Res<ui::vectorscope::CefScopeHandles>,
+) {
+    use bevy::picking::Pickable;
+
+    commands
+        .spawn((
+            layout_sync::LayoutPanel {
+                panel_id: "scopes".into(),
+            },
+            Node {
+                position_type: PositionType::Absolute,
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                overflow: Overflow::scroll_y(),
+                row_gap: Val::Px(4.0),
+                padding: UiRect::all(Val::Px(4.0)),
+                ..default()
+            },
+            GlobalZIndex(i32::MAX),
+            Visibility::Hidden,
+            Pickable::IGNORE,
+        ))
+        .with_children(|parent| {
+            // Vectorscope — 1:1 square
+            parent.spawn((
+                ImageNode::new(handles.vectorscope.clone()).with_mode(NodeImageMode::Stretch),
+                Node {
+                    width: Val::Percent(100.0),
+                    aspect_ratio: Some(1.0),
+                    ..default()
+                },
+                Pickable::IGNORE,
+            ));
+
+            // Waveform — same height as a 1:1, stretches to fill
+            parent.spawn((
+                ImageNode::new(handles.waveform.clone()).with_mode(NodeImageMode::Stretch),
+                Node {
+                    width: Val::Percent(100.0),
+                    aspect_ratio: Some(1.0),
+                    ..default()
+                },
+                Pickable::IGNORE,
+            ));
+
+            // Histogram — 2:1 wide
+            parent.spawn((
+                ImageNode::new(handles.histogram.clone()).with_mode(NodeImageMode::Stretch),
+                Node {
+                    width: Val::Percent(100.0),
+                    aspect_ratio: Some(2.0),
+                    ..default()
+                },
+                Pickable::IGNORE,
+            ));
+
+            // CIE chromaticity — 1:1 square
+            parent.spawn((
+                ImageNode::new(handles.cie.clone()).with_mode(NodeImageMode::Stretch),
+                Node {
+                    width: Val::Percent(100.0),
+                    aspect_ratio: Some(1.0),
+                    ..default()
+                },
+                Pickable::IGNORE,
+            ));
+        });
+}
+
 /// Send initial state to the UI when the app starts.
 fn send_initial_state(
     state: Res<GradingState>,
@@ -287,34 +367,23 @@ fn forward_image_loaded_to_ui(
     }
 }
 
-/// Forward scope data to the UI when ready.
+/// Forward scope data to the WebSocket UI (legacy fallback mode only).
+///
+/// In CEF mode, scopes are rendered directly in Bevy via `update_scope_texture`
+/// and displayed through the dockview layout sync — no IPC needed.
 fn forward_scopes_to_ui(
-    mut events: MessageReader<ScopeDataReadyEvent>,
-    scope_state: Res<ScopeState>,
-    #[cfg(feature = "cef")] mut cef_outbound: Option<ResMut<cef_bridge::OutboundUiMessages>>,
-    #[cfg(not(feature = "cef"))] mut ws_outbound: ResMut<ws_bridge::OutboundUiMessages>,
+    mut events: MessageReader<crispen_bevy::events::ScopeDataReadyEvent>,
+    scope_state: Res<crispen_bevy::resources::ScopeState>,
+    mut ws_outbound: ResMut<ws_bridge::OutboundUiMessages>,
 ) {
     for _ in events.read() {
         if let (Some(h), Some(w), Some(v), Some(c)) = (
-            scope_state.histogram.clone(),
-            scope_state.waveform.clone(),
-            scope_state.vectorscope.clone(),
-            scope_state.cie.clone(),
+            scope_state.histogram.as_ref(),
+            scope_state.waveform.as_ref(),
+            scope_state.vectorscope.as_ref(),
+            scope_state.cie.as_ref(),
         ) {
-            let msg = ipc::BevyToUi::ScopeData {
-                histogram: h,
-                waveform: w,
-                vectorscope: v,
-                cie: c,
-            };
-
-            #[cfg(feature = "cef")]
-            if let Some(ref mut out) = cef_outbound {
-                out.send(msg);
-                continue;
-            }
-
-            #[cfg(not(feature = "cef"))]
+            let msg = ipc::scope_data_to_binary(h, w, v, c);
             ws_outbound.send(msg);
         }
     }

@@ -18,10 +18,6 @@
   import { bridge } from '$lib/bridge';
   import type {
     GradingParams,
-    HistogramData,
-    WaveformData,
-    VectorscopeData,
-    CieData,
     LayoutRegion,
   } from '$lib/types';
 
@@ -30,44 +26,27 @@
   import SlidersPanel from './panels/SlidersPanel.svelte';
   import PrimaryBarsPanel from './panels/PrimaryBarsPanel.svelte';
   import CurvesPanel from './panels/CurvesPanel.svelte';
-  import ScopesPanel from './panels/ScopesPanel.svelte';
   import ColorWheelsPanel from './panels/ColorWheelsPanel.svelte';
 
   let {
     params,
-    scopeData,
   }: {
     params: GradingParams | null;
-    scopeData: {
-      histogram: HistogramData | null;
-      waveform: WaveformData | null;
-      vectorscope: VectorscopeData | null;
-      cie: CieData | null;
-    };
   } = $props();
 
   // Reactive state objects for imperatively mounted panels.
   // Svelte 5's mount() requires $state objects for props to stay reactive.
   const paramProps = $state({ params: null as GradingParams | null });
-  const scopeProps = $state({
-    data: {
-      histogram: null as HistogramData | null,
-      waveform: null as WaveformData | null,
-      vectorscope: null as VectorscopeData | null,
-      cie: null as CieData | null,
-    },
-  });
 
   // Sync incoming props to $state objects so mounted panels update reactively.
   $effect(() => { paramProps.params = params; });
-  $effect(() => { scopeProps.data = scopeData; });
 
   let containerEl: HTMLDivElement | undefined = $state();
   let api: DockviewApi | undefined = $state();
   let disposables: Array<{ dispose: () => void }> = [];
 
   // Bevy panel IDs — these are transparent cutouts positioned by Bevy
-  const BEVY_PANELS = ['viewer'];
+  const BEVY_PANELS = ['viewer', 'scopes'];
 
   // Map component names to Svelte component constructors and their props.
   // Static panels get plain objects; reactive panels get $state objects.
@@ -95,8 +74,8 @@
         getProps: () => paramProps,
       },
       scopes: {
-        component: ScopesPanel,
-        getProps: () => scopeProps,
+        component: BevyPanel,
+        getProps: () => ({ panelId: 'scopes' }),
       },
       'color-wheels': {
         component: ColorWheelsPanel,

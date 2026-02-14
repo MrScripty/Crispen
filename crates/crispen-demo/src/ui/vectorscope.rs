@@ -1055,3 +1055,76 @@ fn render_cie(data: &CieData, gamut: &CieChromaticity) -> Option<(u32, u32, Vec<
 
     Some((resolution, resolution, rgba))
 }
+
+// ── CEF multi-scope rendering ────────────────────────────────────
+
+/// Image handles for all scope types rendered in CEF mode.
+#[derive(Resource)]
+pub struct CefScopeHandles {
+    pub vectorscope: Handle<Image>,
+    pub waveform: Handle<Image>,
+    pub histogram: Handle<Image>,
+    pub cie: Handle<Image>,
+}
+
+/// Allocate placeholder images for all four scope types.
+pub fn setup_cef_scopes(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+    let make_placeholder = |images: &mut Assets<Image>| -> Handle<Image> {
+        let img = Image::new_fill(
+            Extent3d {
+                width: 1,
+                height: 1,
+                depth_or_array_layers: 1,
+            },
+            TextureDimension::D2,
+            &[3, 3, 3, 255],
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+        );
+        images.add(img)
+    };
+    commands.insert_resource(CefScopeHandles {
+        vectorscope: make_placeholder(&mut images),
+        waveform: make_placeholder(&mut images),
+        histogram: make_placeholder(&mut images),
+        cie: make_placeholder(&mut images),
+    });
+}
+
+/// Render all scope types and upload to their respective images (CEF mode).
+pub fn update_cef_scopes(
+    scope_state: Res<ScopeState>,
+    grading_state: Res<GradingState>,
+    handles: Option<Res<CefScopeHandles>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    if !scope_state.is_changed() && !grading_state.is_changed() {
+        return;
+    }
+    let Some(handles) = handles else { return };
+
+    if let Some(data) = scope_state.vectorscope.as_ref() {
+        if let Some((w, h, rgba)) = render_vectorscope(data) {
+            upload_scope_texture(handles.vectorscope.clone(), &mut images, w, h, rgba);
+        }
+    }
+
+    if let Some(data) = scope_state.waveform.as_ref() {
+        if let Some((w, h, rgba)) = render_waveform(data) {
+            upload_scope_texture(handles.waveform.clone(), &mut images, w, h, rgba);
+        }
+    }
+
+    if let Some(data) = scope_state.histogram.as_ref() {
+        if let Some((w, h, rgba)) = render_histogram(data) {
+            upload_scope_texture(handles.histogram.clone(), &mut images, w, h, rgba);
+        }
+    }
+
+    let output_gamut = chromaticity(grading_state.params.color_management.output_space);
+    if let Some(data) = scope_state.cie.as_ref() {
+        if let Some((w, h, rgba)) = render_cie(data, output_gamut) {
+            upload_scope_texture(handles.cie.clone(), &mut images, w, h, rgba);
+        }
+    }
+}

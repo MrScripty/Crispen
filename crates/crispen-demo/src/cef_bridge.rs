@@ -184,7 +184,9 @@ fn update_cef_texture(
     let Some(mut wv) = webview else { return };
     let Some(tex) = ui_tex else { return };
 
+    let t0 = std::time::Instant::now();
     wv.backend.poll();
+    let t_poll = t0.elapsed();
 
     if !wv.backend.is_ready() {
         return;
@@ -196,6 +198,7 @@ fn update_cef_texture(
 
     if let Some(capture) = wv.backend.capture_if_dirty() {
         let CaptureResult::Bgra(bgra_arc, cap_w, cap_h) = capture else { return };
+        let t_capture = t0.elapsed();
 
         if !status.first_capture_done {
             tracing::info!("first CEF capture: {cap_w}x{cap_h}");
@@ -211,7 +214,18 @@ fn update_cef_texture(
                 });
             }
             let data = Arc::try_unwrap(bgra_arc).unwrap_or_else(|a| (*a).clone());
+            let data_len = data.len();
             image.data = Some(data);
+
+            let t_total = t0.elapsed();
+            tracing::info!(
+                "[PERF] update_cef_texture: poll={:.2}ms capture={:.2}ms upload={:.2}ms total={:.2}ms ({}x{}, {}bytes)",
+                t_poll.as_secs_f64() * 1000.0,
+                (t_capture - t_poll).as_secs_f64() * 1000.0,
+                (t_total - t_capture).as_secs_f64() * 1000.0,
+                t_total.as_secs_f64() * 1000.0,
+                cap_w, cap_h, data_len,
+            );
         }
     }
 }
@@ -294,7 +308,12 @@ fn flush_outbound_messages(
 ) {
     let Some(mut wv) = webview else { return };
 
-    for msg in outbound.drain() {
+    let msgs = outbound.drain();
+    if msgs.is_empty() {
+        return;
+    }
+
+    for msg in msgs {
         match serde_json::to_string(&msg) {
             Ok(json) => {
                 let _ = wv.backend.send_to_ui(json);

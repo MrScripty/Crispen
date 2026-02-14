@@ -242,16 +242,9 @@ pub fn update_viewer_texture(
         return;
     }
 
-    let pixel_count = (viewer_data.width * viewer_data.height) as usize;
+    let t0 = std::time::Instant::now();
 
-    tracing::info!(
-        "update_viewer_texture: {}x{} format={:?} bytes={} pixels={}",
-        viewer_data.width,
-        viewer_data.height,
-        viewer_data.format,
-        viewer_data.pixel_bytes.len(),
-        pixel_count,
-    );
+    let pixel_count = (viewer_data.width * viewer_data.height) as usize;
 
     // Keep the viewer transform's aspect ratio in sync with the loaded image.
     let ar = viewer_data.width as f32 / viewer_data.height as f32;
@@ -268,22 +261,16 @@ pub fn update_viewer_texture(
         commands.entity(entity).despawn();
     }
 
-    // Convert linear HDR → sRGB u8 on the CPU.
+    let t_setup = t0.elapsed();
+
+    // Convert to sRGB u8. Srgb8 is already GPU-converted — just copy bytes.
     let srgb_bytes = match viewer_data.format {
+        ViewerFormat::Srgb8 => viewer_data.pixel_bytes.clone(),
         ViewerFormat::F16 => f16_linear_to_srgb8(&viewer_data.pixel_bytes, pixel_count),
         ViewerFormat::F32 => f32_linear_to_srgb8(&viewer_data.pixel_bytes, pixel_count),
     };
 
-    // Log first pixel for diagnostics.
-    if srgb_bytes.len() >= 4 {
-        tracing::debug!(
-            "update_viewer_texture: first pixel sRGB = ({}, {}, {}, {})",
-            srgb_bytes[0],
-            srgb_bytes[1],
-            srgb_bytes[2],
-            srgb_bytes[3],
-        );
-    }
+    let t_convert = t0.elapsed();
 
     if let Some(existing) = images.get_mut(&viewer.handle) {
         let new_size = Extent3d {
@@ -295,11 +282,6 @@ pub fn update_viewer_texture(
         if existing.texture_descriptor.size != new_size
             || existing.texture_descriptor.format != TextureFormat::Rgba8UnormSrgb
         {
-            tracing::info!(
-                "update_viewer_texture: resizing image to {}x{} Rgba8UnormSrgb",
-                new_size.width,
-                new_size.height,
-            );
             *existing = Image::new(
                 new_size,
                 TextureDimension::D2,
@@ -313,4 +295,16 @@ pub fn update_viewer_texture(
     } else {
         tracing::warn!("viewer Image asset not found for handle");
     }
+
+    let t_total = t0.elapsed();
+    tracing::info!(
+        "[PERF] update_viewer_texture: setup={:.2}ms convert={:.2}ms upload={:.2}ms total={:.2}ms ({}x{} {:?})",
+        t_setup.as_secs_f64() * 1000.0,
+        (t_convert - t_setup).as_secs_f64() * 1000.0,
+        (t_total - t_convert).as_secs_f64() * 1000.0,
+        t_total.as_secs_f64() * 1000.0,
+        viewer_data.width,
+        viewer_data.height,
+        viewer_data.format,
+    );
 }

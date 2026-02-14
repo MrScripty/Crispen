@@ -41,29 +41,6 @@ export interface GradingParams {
   sat_vs_sat: [number, number][];
 }
 
-// -- Scope data --
-
-export interface HistogramData {
-  bins: number[][];
-  peak: number;
-}
-
-export interface WaveformData {
-  width: number;
-  height: number;
-  data: number[][];
-}
-
-export interface VectorscopeData {
-  resolution: number;
-  density: number[];
-}
-
-export interface CieData {
-  resolution: number;
-  density: number[];
-}
-
 // -- Layout --
 
 export interface LayoutRegion {
@@ -80,15 +57,6 @@ export interface LayoutRegion {
 export type BevyToUi =
   | { type: 'Initialize'; data: { params: GradingParams } }
   | { type: 'ParamsUpdated'; data: { params: GradingParams } }
-  | {
-      type: 'ScopeData';
-      data: {
-        histogram: HistogramData;
-        waveform: WaveformData;
-        vectorscope: VectorscopeData;
-        cie: CieData;
-      };
-    }
   | { type: 'ImageLoaded'; data: { path: string; width: number; height: number; bit_depth: string } }
   | { type: 'Error'; data: { message: string } };
 

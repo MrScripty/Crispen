@@ -4,6 +4,7 @@
 //! CEF IPC bridge. They follow the `#[serde(tag = "type", content = "data")]`
 //! pattern from Pentimento for consistent serialization.
 
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 
 use crispen_core::scopes::{CieData, HistogramData, VectorscopeData, WaveformData};
@@ -25,16 +26,16 @@ pub enum BevyToUi {
         params: GradingParams,
     },
 
-    /// Scope analysis data ready for display.
+    /// Scope analysis data with binary-encoded arrays for fast serialization.
+    ///
+    /// Large `u32` density arrays are encoded as base64 little-endian binary
+    /// strings instead of JSON number arrays. This reduces serialization time
+    /// from ~100ms to ~2ms for typical scope data (~1.5M values).
     ScopeData {
-        /// Histogram data for R, G, B, and luminance.
-        histogram: HistogramData,
-        /// Waveform scope data.
-        waveform: WaveformData,
-        /// Vectorscope data.
-        vectorscope: VectorscopeData,
-        /// CIE chromaticity diagram data.
-        cie: CieData,
+        histogram: BinaryHistogram,
+        waveform: BinaryWaveform,
+        vectorscope: BinaryDensityGrid,
+        cie: BinaryDensityGrid,
     },
 
     /// A new image was loaded successfully.
@@ -119,6 +120,67 @@ pub enum UiToBevy {
         /// Serialised dockview JSON.
         layout_json: String,
     },
+}
+
+// ── Binary-encoded scope types for fast JSON serialization ───────
+
+/// Histogram with base64-encoded bin arrays.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BinaryHistogram {
+    /// Base64 LE u32 arrays for `[R, G, B, Luma]` channels (256 bins each).
+    pub bins: [String; 4],
+    pub peak: u32,
+}
+
+/// Waveform with base64-encoded channel data.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BinaryWaveform {
+    pub width: u32,
+    pub height: u32,
+    /// Base64 LE u32 arrays for R, G, B channels.
+    pub data: [String; 3],
+}
+
+/// Square density grid with base64-encoded data (vectorscope or CIE).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BinaryDensityGrid {
+    pub resolution: u32,
+    /// Base64 LE u32 density values (length = resolution²).
+    pub density: String,
+}
+
+/// Encode a `u32` slice as a base64 string of its little-endian byte representation.
+fn encode_u32_slice(data: &[u32]) -> String {
+    let bytes: &[u8] = bytemuck::cast_slice(data);
+    base64::engine::general_purpose::STANDARD.encode(bytes)
+}
+
+/// Build a `BevyToUi::ScopeData` message from core scope types.
+pub fn scope_data_to_binary(
+    histogram: &HistogramData,
+    waveform: &WaveformData,
+    vectorscope: &VectorscopeData,
+    cie: &CieData,
+) -> BevyToUi {
+    BevyToUi::ScopeData {
+        histogram: BinaryHistogram {
+            bins: std::array::from_fn(|i| encode_u32_slice(&histogram.bins[i])),
+            peak: histogram.peak,
+        },
+        waveform: BinaryWaveform {
+            width: waveform.width,
+            height: waveform.height,
+            data: std::array::from_fn(|i| encode_u32_slice(&waveform.data[i])),
+        },
+        vectorscope: BinaryDensityGrid {
+            resolution: vectorscope.resolution,
+            density: encode_u32_slice(&vectorscope.density),
+        },
+        cie: BinaryDensityGrid {
+            resolution: cie.resolution,
+            density: encode_u32_slice(&cie.density),
+        },
+    }
 }
 
 /// A rectangular region where Bevy should render a widget.

@@ -2,24 +2,12 @@
   import ToolbarPanel from '$lib/docking/panels/ToolbarPanel.svelte';
   import DockviewContainer from '$lib/docking/DockviewContainer.svelte';
   import { bridge } from '$lib/bridge';
-  import type {
-    GradingParams,
-    HistogramData,
-    WaveformData,
-    VectorscopeData,
-    CieData,
-  } from '$lib/types';
+  import type { GradingParams } from '$lib/types';
   import { onMount } from 'svelte';
 
   // Backend-owned state (never modified locally, only received from Bevy)
   let params = $state<GradingParams | null>(null);
   let imageInfo = $state<{ path: string; width: number; height: number; bit_depth: string } | null>(null);
-  let scopeData = $state<{
-    histogram: HistogramData | null;
-    waveform: WaveformData | null;
-    vectorscope: VectorscopeData | null;
-    cie: CieData | null;
-  }>({ histogram: null, waveform: null, vectorscope: null, cie: null });
 
   // Transient UI state (local only)
   let error = $state<string | null>(null);
@@ -32,9 +20,6 @@
           break;
         case 'ParamsUpdated':
           params = msg.data.params;
-          break;
-        case 'ScopeData':
-          scopeData = msg.data;
           break;
         case 'ImageLoaded':
           imageInfo = msg.data;
@@ -51,7 +36,7 @@
 
 <div class="app">
   <ToolbarPanel {params} {imageInfo} {error} />
-  <DockviewContainer {params} {scopeData} />
+  <DockviewContainer {params} />
 </div>
 
 <style>
@@ -61,7 +46,7 @@
     display: flex;
     flex-direction: column;
     background: transparent;
-    color: #e0e0e0;
+    color: var(--color-text-primary);
     font-family: system-ui, -apple-system, sans-serif;
     font-size: 13px;
   }
