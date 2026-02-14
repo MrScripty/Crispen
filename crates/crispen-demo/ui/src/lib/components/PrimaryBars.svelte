@@ -10,7 +10,12 @@
     { key: 'gain' as const, label: 'Gain', min: 0, max: 4, step: 0.01 },
     { key: 'offset' as const, label: 'Offset', min: -1, max: 1, step: 0.01 },
   ];
-  const channelColors = ['#ff4444', '#44ff44', '#4488ff', '#cccccc'];
+  const channelVars = [
+    'var(--color-channel-r)',
+    'var(--color-channel-g)',
+    'var(--color-channel-b)',
+    'var(--color-channel-master)',
+  ];
 
   function updateBar(key: 'lift' | 'gamma' | 'gain' | 'offset', channel: number, value: number) {
     const updated = $state.snapshot(params) as GradingParams;
@@ -32,7 +37,7 @@
             max={bar.max}
             step={bar.step}
             value={params[bar.key][ch]}
-            style="accent-color: {channelColors[ch]}"
+            style="accent-color: {channelVars[ch]}"
             oninput={(e) => updateBar(bar.key, ch, parseFloat((e.target as HTMLInputElement).value))}
           />
         {/each}
@@ -46,7 +51,7 @@
     margin: 16px 0 8px;
     font-size: 13px;
     font-weight: 500;
-    color: #aaa;
+    color: var(--color-text-heading);
   }
 
   .bar-group {
@@ -56,7 +61,7 @@
   .bar-label {
     display: block;
     font-size: 11px;
-    color: #888;
+    color: var(--color-text-secondary);
     margin-bottom: 4px;
   }
 

@@ -26,7 +26,7 @@
   }
 
   .placeholder {
-    color: #666;
+    color: var(--color-text-tertiary);
     text-align: center;
     padding: 20px;
   }

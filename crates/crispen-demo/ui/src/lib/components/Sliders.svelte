@@ -50,7 +50,7 @@
     margin: 16px 0 8px;
     font-size: 13px;
     font-weight: 500;
-    color: #aaa;
+    color: var(--color-text-heading);
   }
 
   .slider-row {
@@ -64,7 +64,7 @@
   .slider-label {
     width: 110px;
     font-size: 11px;
-    color: #888;
+    color: var(--color-text-secondary);
     flex-shrink: 0;
   }
 
@@ -78,7 +78,7 @@
     width: 50px;
     text-align: right;
     font-size: 11px;
-    color: #ccc;
+    color: var(--color-text-value);
     font-variant-numeric: tabular-nums;
   }
 </style>

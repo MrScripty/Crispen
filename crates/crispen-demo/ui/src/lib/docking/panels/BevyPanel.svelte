@@ -63,7 +63,7 @@
     top: 4px;
     left: 8px;
     font-size: 10px;
-    color: rgba(255, 255, 255, 0.15);
+    color: var(--color-panel-label);
     pointer-events: none;
     user-select: none;
     text-transform: uppercase;

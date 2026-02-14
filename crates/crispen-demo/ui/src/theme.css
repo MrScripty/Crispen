@@ -1,0 +1,101 @@
+/*
+ * Crispen color theme
+ *
+ * Copied from Pantograph (src/styles.css) and extended with
+ * Crispen-specific semantic tokens.  Every color in the UI should
+ * reference one of these variables — no hardcoded hex values.
+ */
+
+:root {
+  /* ── Pantograph base variables ─────────────────────────────── */
+  --color-bg-inner: #0a0a0a;
+  --color-bg-outer: #262626;
+  --color-grid: rgba(255, 255, 255, 0.05);
+  --color-ruler: #404040;
+  --color-accent: #3b82f6;
+
+  /* ── Backgrounds ───────────────────────────────────────────── */
+  --color-bg-surface: #252525;
+  --color-bg-surface-alt: #2a2a2a;
+  --color-bg-canvas: #1a1a1a;
+  --color-bg-canvas-deep: #111;
+  --color-bg-input: #1e1e1e;
+  --color-bg-interactive: #3a3a3a;
+  --color-bg-interactive-hover: #4a4a4a;
+  --color-bg-inner-disc: #222;
+
+  /* ── Text ──────────────────────────────────────────────────── */
+  --color-text-primary: #e0e0e0;
+  --color-text-title: #fff;
+  --color-text-heading: #aaa;
+  --color-text-secondary: #888;
+  --color-text-tertiary: #666;
+  --color-text-value: #ccc;
+  --color-text-dim: #555;
+  --color-text-hint: #444;
+
+  /* ── Borders ───────────────────────────────────────────────── */
+  --color-border: #333;
+  --color-border-subtle: #444;
+  --color-border-input: #555;
+  --color-border-active: #666;
+
+  /* ── Canvas overlays ───────────────────────────────────────── */
+  --color-canvas-grid: rgba(255, 255, 255, 0.08);
+  --color-canvas-crosshair: rgba(255, 255, 255, 0.15);
+  --color-canvas-guide: rgba(255, 255, 255, 0.2);
+  --color-canvas-center: rgba(255, 255, 255, 0.3);
+  --color-canvas-identity: rgba(255, 255, 255, 0.2);
+
+  /* ── Accent / interactive ──────────────────────────────────── */
+  --color-accent-15: rgba(59, 130, 246, 0.15);
+  --color-accent-30: rgba(59, 130, 246, 0.3);
+  --color-accent-50: rgba(59, 130, 246, 0.5);
+
+  /* ── Scope / channel colors (color science, not decorative) ── */
+  --color-channel-r: #ff4444;
+  --color-channel-g: #44ff44;
+  --color-channel-b: #4488ff;
+  --color-channel-master: #cccccc;
+  --color-channel-r-60: rgba(255, 80, 80, 0.6);
+  --color-channel-g-60: rgba(80, 255, 80, 0.6);
+  --color-channel-b-60: rgba(80, 120, 255, 0.6);
+  --color-scope-skin-tone: rgba(255, 180, 100, 0.3);
+  --color-scope-target-r: rgba(255, 80, 80, 0.6);
+  --color-scope-target-yl: rgba(255, 255, 80, 0.5);
+  --color-scope-target-g: rgba(80, 255, 80, 0.5);
+  --color-scope-target-cy: rgba(80, 255, 255, 0.5);
+  --color-scope-target-b: rgba(80, 120, 255, 0.6);
+  --color-scope-target-mg: rgba(255, 80, 255, 0.5);
+
+  /* ── Status ────────────────────────────────────────────────── */
+  --color-error: #ff6b6b;
+
+  /* ── Panel watermark ───────────────────────────────────────── */
+  --color-panel-label: rgba(255, 255, 255, 0.15);
+
+  /* ── Shadow ────────────────────────────────────────────────── */
+  --color-shadow: rgba(0, 0, 0, 0.5);
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+  background: transparent;
+  font-family: system-ui, -apple-system, sans-serif;
+  color: var(--color-text-primary);
+}
+
+#app {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}

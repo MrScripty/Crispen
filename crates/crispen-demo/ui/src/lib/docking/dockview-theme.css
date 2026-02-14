@@ -1,35 +1,35 @@
-/* Crispen dark theme for dockview-core */
+/* Crispen dark theme for dockview-core — all colors from theme.css variables */
 
 :root {
   --dv-background-color: transparent;
-  --dv-paneview-header-border-color: #333;
-  --dv-tabs-and-actions-container-background-color: #252525;
-  --dv-activegroup-visiblepanel-tab-background-color: #3a3a3a;
-  --dv-activegroup-hiddenpanel-tab-background-color: #252525;
-  --dv-inactivegroup-visiblepanel-tab-background-color: #333;
-  --dv-inactivegroup-hiddenpanel-tab-background-color: #252525;
-  --dv-tab-divider-color: #444;
-  --dv-activegroup-visiblepanel-tab-color: #e0e0e0;
-  --dv-activegroup-hiddenpanel-tab-color: #888;
-  --dv-inactivegroup-visiblepanel-tab-color: #aaa;
-  --dv-inactivegroup-hiddenpanel-tab-color: #666;
-  --dv-separator-border: #333;
+  --dv-paneview-header-border-color: var(--color-border);
+  --dv-tabs-and-actions-container-background-color: var(--color-bg-surface);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--color-bg-interactive);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--color-bg-surface);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--color-border);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--color-bg-surface);
+  --dv-tab-divider-color: var(--color-border-subtle);
+  --dv-activegroup-visiblepanel-tab-color: var(--color-text-primary);
+  --dv-activegroup-hiddenpanel-tab-color: var(--color-text-secondary);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--color-text-heading);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--color-text-tertiary);
+  --dv-separator-border: var(--color-border);
   --dv-group-view-background-color: transparent;
-  --dv-tabs-container-scrollbar-color: #555;
-  --dv-icon-hover-background-color: rgba(242, 140, 24, 0.3);
-  --dv-floating-box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  --dv-drag-over-background-color: rgba(242, 140, 24, 0.15);
-  --dv-drag-over-border-color: rgba(242, 140, 24, 0.5);
+  --dv-tabs-container-scrollbar-color: var(--color-border-input);
+  --dv-icon-hover-background-color: var(--color-accent-30);
+  --dv-floating-box-shadow: 0 4px 16px var(--color-shadow);
+  --dv-drag-over-background-color: var(--color-accent-15);
+  --dv-drag-over-border-color: var(--color-accent-50);
 }
 
 .dv-resize-handle-horizontal,
 .dv-resize-handle-vertical {
-  background: #333;
+  background: var(--color-border);
 }
 
 .dv-resize-handle-horizontal:hover,
 .dv-resize-handle-vertical:hover {
-  background: rgba(242, 140, 24, 0.5);
+  background: var(--color-accent-50);
 }
 
 .dv-default-tab {

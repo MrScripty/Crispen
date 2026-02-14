@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { GradingParams } from '$lib/types';
   import { bridge } from '$lib/bridge';
+  import { getCanvasTheme } from '$lib/theme';
   import { onMount } from 'svelte';
 
   let { params }: { params: GradingParams } = $props();
@@ -147,6 +148,7 @@
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const theme = getCanvasTheme();
     const s = WHEEL_SIZE;
     const cx = s / 2;
     const cy = s / 2;
@@ -156,7 +158,7 @@
     ctx.clearRect(0, 0, s, s);
 
     // Dark background circle.
-    ctx.fillStyle = '#1a1a1a';
+    ctx.fillStyle = theme.bgCanvas;
     ctx.beginPath();
     ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
     ctx.fill();
@@ -174,13 +176,13 @@
     }
 
     // Inner disc.
-    ctx.fillStyle = '#222';
+    ctx.fillStyle = theme.bgInnerDisc;
     ctx.beginPath();
     ctx.arc(cx, cy, innerR - 1, 0, Math.PI * 2);
     ctx.fill();
 
     // Crosshair.
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeStyle = theme.crosshair;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(cx, cy - innerR + 4);
@@ -203,8 +205,8 @@
     const indicatorY = cy - py * scale; // flip Y
 
     // Indicator dot.
-    ctx.fillStyle = '#f28c18';
-    ctx.strokeStyle = '#fff';
+    ctx.fillStyle = theme.accent;
+    ctx.strokeStyle = theme.textTitle;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
     ctx.arc(indicatorX, indicatorY, 5, 0, Math.PI * 2);
@@ -212,7 +214,7 @@
     ctx.stroke();
 
     // Center dot.
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.fillStyle = theme.center;
     ctx.beginPath();
     ctx.arc(cx, cy, 2, 0, Math.PI * 2);
     ctx.fill();
@@ -278,7 +280,7 @@
     margin: 0 0 8px;
     font-size: 13px;
     font-weight: 500;
-    color: #aaa;
+    color: var(--color-text-heading);
   }
 
   .wheels-grid {
@@ -288,7 +290,7 @@
   }
 
   .wheel-group {
-    background: #252525;
+    background: var(--color-bg-surface);
     border-radius: 6px;
     padding: 8px;
   }
@@ -296,7 +298,7 @@
   .wheel-label {
     display: block;
     font-size: 11px;
-    color: #888;
+    color: var(--color-text-secondary);
     text-transform: capitalize;
     margin-bottom: 4px;
     text-align: center;
@@ -330,17 +332,17 @@
 
   .channel-label {
     font-size: 10px;
-    color: #666;
+    color: var(--color-text-tertiary);
     margin-bottom: 2px;
   }
 
   .channel input {
     width: 100%;
     padding: 2px 4px;
-    background: #1a1a1a;
-    border: 1px solid #444;
+    background: var(--color-bg-canvas);
+    border: 1px solid var(--color-border-subtle);
     border-radius: 3px;
-    color: #e0e0e0;
+    color: var(--color-text-primary);
     font-size: 11px;
     text-align: center;
   }

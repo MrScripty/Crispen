@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { GradingParams } from '$lib/types';
   import { bridge } from '$lib/bridge';
+  import { getCanvasTheme } from '$lib/theme';
   import { onMount } from 'svelte';
 
   let { params }: { params: GradingParams } = $props();
@@ -187,15 +188,16 @@
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const theme = getCanvasTheme();
     const cfg = curveConfig();
     const pts = curvePoints();
 
     ctx.clearRect(0, 0, SIZE, SIZE);
-    ctx.fillStyle = '#1a1a1a';
+    ctx.fillStyle = theme.bgCanvas;
     ctx.fillRect(0, 0, SIZE, SIZE);
 
     // Grid.
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.strokeStyle = theme.grid;
     ctx.lineWidth = 1;
     for (let i = 0; i <= 4; i++) {
       const frac = i / 4;
@@ -212,13 +214,13 @@
     }
 
     // Plot border.
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.strokeStyle = theme.crosshair;
     ctx.strokeRect(PAD, PAD, PLOT_SIZE, PLOT_SIZE);
 
     // Identity line (horizontal at yIdentity).
     const [idLeft, idY] = dataToCanvas(0, cfg.yIdentity);
     const [idRight] = dataToCanvas(1, cfg.yIdentity);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.strokeStyle = theme.identity;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
     ctx.moveTo(idLeft, idY);
@@ -228,7 +230,7 @@
 
     // Interpolated curve.
     if (pts.length > 0) {
-      ctx.strokeStyle = '#f28c18';
+      ctx.strokeStyle = theme.accent;
       ctx.lineWidth = 2;
       ctx.beginPath();
       const steps = PLOT_SIZE;
@@ -246,8 +248,8 @@
     // Control points.
     for (let i = 0; i < pts.length; i++) {
       const [cx, cy] = dataToCanvas(pts[i][0], pts[i][1]);
-      ctx.fillStyle = dragIndex === i ? '#fff' : '#f28c18';
-      ctx.strokeStyle = '#fff';
+      ctx.fillStyle = dragIndex === i ? theme.textTitle : theme.accent;
+      ctx.strokeStyle = theme.textTitle;
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.arc(cx, cy, 5, 0, Math.PI * 2);
@@ -256,7 +258,7 @@
     }
 
     // Axis labels.
-    ctx.fillStyle = '#555';
+    ctx.fillStyle = theme.textDim;
     ctx.font = '9px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(cfg.xLabel, PAD + PLOT_SIZE / 2, SIZE - 4);
@@ -267,7 +269,7 @@
     ctx.restore();
 
     // Scale labels.
-    ctx.fillStyle = '#444';
+    ctx.fillStyle = theme.textHint;
     ctx.font = '8px sans-serif';
     ctx.textAlign = 'right';
     ctx.fillText(cfg.yMax.toFixed(1), PAD - 4, PAD + 4);
@@ -324,7 +326,7 @@
     margin: 0 0 8px;
     font-size: 13px;
     font-weight: 500;
-    color: #aaa;
+    color: var(--color-text-heading);
   }
 
   .curve-tabs {
@@ -335,18 +337,18 @@
 
   .curve-tab {
     padding: 4px 8px;
-    background: #2a2a2a;
-    border: 1px solid #444;
+    background: var(--color-bg-surface-alt);
+    border: 1px solid var(--color-border-subtle);
     border-radius: 3px;
-    color: #888;
+    color: var(--color-text-secondary);
     cursor: pointer;
     font-size: 10px;
   }
 
   .curve-tab.active {
-    background: #3a3a3a;
-    color: #e0e0e0;
-    border-color: #666;
+    background: var(--color-bg-interactive);
+    color: var(--color-text-primary);
+    border-color: var(--color-border-active);
   }
 
   .curve-canvas-wrap {
@@ -366,7 +368,7 @@
 
   .curve-hint {
     font-size: 9px;
-    color: #444;
+    color: var(--color-text-hint);
     margin: 4px 0 0;
   }
 </style>

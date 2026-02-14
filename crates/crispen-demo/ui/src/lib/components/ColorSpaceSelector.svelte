@@ -91,7 +91,7 @@
     margin: 0 0 8px;
     font-size: 13px;
     font-weight: 500;
-    color: #aaa;
+    color: var(--color-text-heading);
   }
 
   .selector-row {
@@ -107,16 +107,16 @@
   .selector-row span {
     width: 60px;
     font-size: 11px;
-    color: #888;
+    color: var(--color-text-secondary);
   }
 
   .selector-row select {
     flex: 1;
     padding: 3px 6px;
-    background: #2a2a2a;
-    border: 1px solid #444;
+    background: var(--color-bg-surface-alt);
+    border: 1px solid var(--color-border-subtle);
     border-radius: 3px;
-    color: #e0e0e0;
+    color: var(--color-text-primary);
     font-size: 11px;
   }
 </style>

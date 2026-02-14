@@ -68,8 +68,8 @@
     align-items: center;
     gap: 12px;
     padding: 8px 16px;
-    background: #252525;
-    border-bottom: 1px solid #333;
+    background: var(--color-bg-surface);
+    border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
     pointer-events: auto;
   }
@@ -78,7 +78,7 @@
     font-size: 16px;
     font-weight: 500;
     margin: 0;
-    color: #fff;
+    color: var(--color-text-title);
   }
 
   .toolbar-actions {
@@ -89,37 +89,37 @@
 
   .toolbar-actions button {
     padding: 4px 12px;
-    background: #3a3a3a;
-    border: 1px solid #555;
+    background: var(--color-bg-interactive);
+    border: 1px solid var(--color-border-input);
     border-radius: 4px;
-    color: #e0e0e0;
+    color: var(--color-text-primary);
     cursor: pointer;
     font-size: 12px;
   }
 
   .toolbar-actions button:hover {
-    background: #4a4a4a;
+    background: var(--color-bg-interactive-hover);
   }
 
   .toolbar-actions .path-input {
     width: 360px;
     max-width: 40vw;
     padding: 4px 8px;
-    background: #1e1e1e;
-    border: 1px solid #555;
+    background: var(--color-bg-input);
+    border: 1px solid var(--color-border-input);
     border-radius: 4px;
-    color: #e0e0e0;
+    color: var(--color-text-primary);
     font-size: 12px;
   }
 
   .image-info {
     margin-left: auto;
-    color: #888;
+    color: var(--color-text-secondary);
     font-size: 12px;
   }
 
   .error-badge {
-    color: #ff6b6b;
+    color: var(--color-error);
     font-size: 12px;
   }
 </style>
