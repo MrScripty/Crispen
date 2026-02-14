@@ -20,7 +20,7 @@
   type SliderKey = (typeof sliders)[number]['key'];
 
   function updateSlider(key: SliderKey, value: number) {
-    const updated = structuredClone(params);
+    const updated = $state.snapshot(params) as GradingParams;
     updated[key] = value;
     bridge.setParams(updated);
   }

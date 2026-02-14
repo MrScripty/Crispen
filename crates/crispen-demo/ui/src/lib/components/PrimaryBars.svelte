@@ -13,7 +13,7 @@
   const channelColors = ['#ff4444', '#44ff44', '#4488ff', '#cccccc'];
 
   function updateBar(key: 'lift' | 'gamma' | 'gain' | 'offset', channel: number, value: number) {
-    const updated = structuredClone(params);
+    const updated = $state.snapshot(params) as GradingParams;
     updated[key][channel] = value;
     bridge.setParams(updated);
   }

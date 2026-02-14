@@ -37,7 +37,7 @@
   };
 
   function updateSpace(field: keyof ColorManagementConfig, value: string) {
-    const updated = structuredClone(params);
+    const updated = $state.snapshot(params) as GradingParams;
     updated.color_management[field] = value;
     bridge.setParams(updated);
   }

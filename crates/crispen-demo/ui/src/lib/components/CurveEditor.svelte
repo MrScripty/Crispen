@@ -175,7 +175,7 @@
   }
 
   function commitPoints(pts: [number, number][]) {
-    const updated = structuredClone(params);
+    const updated = $state.snapshot(params) as GradingParams;
     updated[curveConfig().key] = pts;
     bridge.setParams(updated);
   }

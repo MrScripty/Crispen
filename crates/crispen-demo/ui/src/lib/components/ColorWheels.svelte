@@ -63,13 +63,13 @@
   let dragWheel: WheelName | null = $state(null);
 
   function updateWheel(wheel: WheelName, channel: number, value: number) {
-    const updated = structuredClone(params);
+    const updated = $state.snapshot(params) as GradingParams;
     updated[wheel][channel] = value;
     bridge.setParams(updated);
   }
 
   function updateWheelRgb(wheel: WheelName, r: number, g: number, b: number) {
-    const updated = structuredClone(params);
+    const updated = $state.snapshot(params) as GradingParams;
     const neutral = neutralRgb(wheel);
     updated[wheel][0] = neutral[0] + r;
     updated[wheel][1] = neutral[1] + g;
@@ -125,7 +125,7 @@
 
   // Double-click to reset a wheel to neutral.
   function handleDblClick(wheel: WheelName) {
-    const updated = structuredClone(params);
+    const updated = $state.snapshot(params) as GradingParams;
     const neutral = neutralRgb(wheel);
     updated[wheel][0] = neutral[0];
     updated[wheel][1] = neutral[1];

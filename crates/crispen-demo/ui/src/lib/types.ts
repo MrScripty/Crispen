@@ -12,6 +12,7 @@ export interface ColorManagementConfig {
   input_space: string;
   working_space: string;
   output_space: string;
+  display_oetf: string;
 }
 
 export interface GradingParams {
