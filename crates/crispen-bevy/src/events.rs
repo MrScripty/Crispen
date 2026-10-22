@@ -10,7 +10,9 @@ use crispen_core::transform::params::GradingParams;
 #[derive(Message)]
 pub enum ColorGradingCommand {
     /// Apply new grading parameters.
-    SetParams { params: GradingParams },
+    ///
+    /// Boxing keeps commands small and adds one allocation per command.
+    SetParams { params: Box<GradingParams> },
     /// Run automatic white balance on the current image.
     AutoBalance,
     /// Reset all grading to identity defaults.

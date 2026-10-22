@@ -39,6 +39,7 @@ pub fn handle_grading_commands(
     for cmd in commands.read() {
         match cmd {
             ColorGradingCommand::SetParams { params } => {
+                let params = params.as_ref();
                 if state.params != *params {
                     state.params = params.clone();
                     state.dirty = true;

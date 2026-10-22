@@ -27,6 +27,23 @@ Integrates the crispen color grading pipeline into Bevy's ECS. Manages grading s
 - **Internal**: `crispen-core` (domain types), `crispen-gpu` (GPU pipeline)
 - **External**: `bevy` (ECS framework), `tracing` (logging)
 
+## API migration: boxed grading commands
+
+`ColorGradingCommand::SetParams` now holds `Box<GradingParams>` to keep the
+command enum small. Downstream Rust callers must replace
+`ColorGradingCommand::SetParams { params }` with:
+
+```rust
+ColorGradingCommand::SetParams {
+    params: Box::new(params),
+}
+```
+
+This adds one heap allocation per emitted `SetParams` command. Consumers can
+borrow the parameters with `params.as_ref()`; the grading system still clones
+the inner `GradingParams` into its state only when the values change. The
+`UiToBevy` IPC representation and grading calculations are unchanged.
+
 ## Usage Examples
 
 ```rust
