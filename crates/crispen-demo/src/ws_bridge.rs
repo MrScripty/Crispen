@@ -220,9 +220,7 @@ fn dispatch_ui_message(
             }
         }
         UiToBevy::SetParams { params } => {
-            commands.write(ColorGradingCommand::SetParams {
-                params: Box::new(params),
-            });
+            commands.write(ColorGradingCommand::SetParams { params });
         }
         UiToBevy::AutoBalance => {
             commands.write(ColorGradingCommand::AutoBalance);

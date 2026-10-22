@@ -33,10 +33,10 @@ pub fn track_mouse_position(
     }
 
     let now = Instant::now();
-    if let Some(last) = state.last_move_sent {
-        if now.duration_since(last) < THROTTLE {
-            return;
-        }
+    if let Some(last) = state.last_move_sent
+        && now.duration_since(last) < THROTTLE
+    {
+        return;
     }
 
     wv.backend.send_mouse_event(MouseEvent::Move {

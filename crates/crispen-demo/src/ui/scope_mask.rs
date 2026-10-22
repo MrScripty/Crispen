@@ -318,10 +318,10 @@ fn on_viewer_drag(
     );
 
     // Only add point if far enough from the last one.
-    if let Some(last) = state.polygon.last() {
-        if (*last - uv).length_squared() < MIN_POINT_DIST_SQ {
-            return;
-        }
+    if let Some(last) = state.polygon.last()
+        && (*last - uv).length_squared() < MIN_POINT_DIST_SQ
+    {
+        return;
     }
 
     state.polygon.push(uv);
@@ -381,7 +381,7 @@ fn rasterize_polygon(polygon: &[Vec2], width: u32, height: u32) -> Vec<u32> {
         intersections.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         // Fill between pairs of intersections (even-odd rule).
-        for pair in intersections.chunks_exact(2) {
+        for pair in intersections.as_chunks::<2>().0 {
             let x_start = ((pair[0] * width as f32).max(0.0) as u32).min(width);
             let x_end = ((pair[1] * width as f32).ceil().max(0.0) as u32).min(width);
             let row_offset = (y * width) as usize;
@@ -512,9 +512,9 @@ fn render_mask_overlay(polygon: &[Vec2], width: u32, height: u32) -> Vec<u8> {
     };
 
     // Fill: outside gets a semi-transparent dark overlay, inside is transparent.
-    for i in 0..pixel_count {
+    for (i, is_inside) in inside.iter().enumerate() {
         let base = i * 4;
-        if inside[i] == 0 {
+        if *is_inside == 0 {
             rgba[base] = 0;
             rgba[base + 1] = 0;
             rgba[base + 2] = 0;

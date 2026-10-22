@@ -330,12 +330,11 @@ fn viewer_target_size(window_q: &Query<&Window, With<PrimaryWindow>>) -> Option<
 
 // ── Master Sliders → GradingState ───────────────────────────────────────────
 
+type ChangedMasterSliderFilter = (Changed<MasterSliderValue>, With<MasterSliderInner>);
+
 /// Sync master slider value changes to GradingState lift/gamma/gain/offset[3].
 pub fn sync_master_sliders_to_params(
-    sliders: Query<
-        (&MasterSliderValue, &MasterSliderWheel),
-        (Changed<MasterSliderValue>, With<MasterSliderInner>),
-    >,
+    sliders: Query<(&MasterSliderValue, &MasterSliderWheel), ChangedMasterSliderFilter>,
     mut state: ResMut<GradingState>,
 ) {
     for (value, wheel) in sliders.iter() {

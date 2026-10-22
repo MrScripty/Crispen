@@ -313,7 +313,6 @@ fn send_initial_state(
     #[cfg(feature = "cef")]
     if let Some(ref mut out) = cef_outbound {
         out.send(msg);
-        return;
     }
 
     #[cfg(not(feature = "cef"))]

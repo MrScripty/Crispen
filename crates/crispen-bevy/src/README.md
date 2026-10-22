@@ -44,6 +44,11 @@ borrow the parameters with `params.as_ref()`; the grading system still clones
 the inner `GradingParams` into its state only when the values change. The
 `UiToBevy` IPC representation and grading calculations are unchanged.
 
+The demo also boxes incoming `UiToBevy::SetParams` during deserialization. Its
+WebSocket bridge transfers that box into the command without another allocation;
+its CEF bridge moves out the inner value before updating state. Incoming CEF
+messages therefore incur an allocation too. The JSON envelope is unchanged.
+
 ## Usage Examples
 
 ```rust
