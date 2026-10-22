@@ -67,7 +67,7 @@ pub enum UiToBevy {
     /// Set new grading parameters (UI → backend).
     SetParams {
         /// The new grading parameters.
-        params: GradingParams,
+        params: Box<GradingParams>,
     },
 
     /// Request automatic white balance.
@@ -198,4 +198,28 @@ pub struct LayoutRegion {
     pub height: f32,
     /// Whether the panel is visible.
     pub visible: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn set_params_preserves_legacy_json_envelope() {
+        let params = GradingParams {
+            gain: [1.25, 1.0, 0.75, 1.0],
+            ..Default::default()
+        };
+        let expected = serde_json::json!({
+            "type": "SetParams",
+            "data": { "params": &params },
+        });
+
+        let decoded: UiToBevy = serde_json::from_value(expected.clone()).unwrap();
+        match &decoded {
+            UiToBevy::SetParams { params: actual } => assert_eq!(actual.as_ref(), &params),
+            other => panic!("expected SetParams, got {other:?}"),
+        }
+        assert_eq!(serde_json::to_value(decoded).unwrap(), expected);
+    }
 }

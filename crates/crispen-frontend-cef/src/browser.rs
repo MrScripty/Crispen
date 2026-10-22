@@ -209,12 +209,12 @@ fn find_helper_binary() -> Option<String> {
         tracing::warn!("CEF_HELPER_PATH set but file not found: {path}");
     }
 
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let helper = dir.join("crispen-cef-helper");
-            if helper.exists() {
-                return helper.to_str().map(|s| s.to_string());
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        let helper = dir.join("crispen-cef-helper");
+        if helper.exists() {
+            return helper.to_str().map(|s| s.to_string());
         }
     }
 
@@ -253,12 +253,11 @@ fn find_cef_dir() -> Option<std::path::PathBuf> {
     }
 
     // 3. Same directory as the running executable.
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            if dir.join("icudtl.dat").exists() {
-                return Some(dir.to_path_buf());
-            }
-        }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+        && dir.join("icudtl.dat").exists()
+    {
+        return Some(dir.to_path_buf());
     }
 
     None
@@ -285,12 +284,14 @@ pub fn ensure_cef_initialized() -> Result<(), FrontendError> {
             }
         };
 
-        let mut settings = Settings::default();
-        settings.windowless_rendering_enabled = 1;
-        settings.no_sandbox = 1;
-        settings.external_message_pump = 1;
-        settings.multi_threaded_message_loop = 0;
-        settings.browser_subprocess_path = helper_path.as_str().into();
+        let mut settings = Settings {
+            windowless_rendering_enabled: 1,
+            no_sandbox: 1,
+            external_message_pump: 1,
+            multi_threaded_message_loop: 0,
+            browser_subprocess_path: helper_path.as_str().into(),
+            ..Default::default()
+        };
 
         // CEF resource paths — use CEF_DIR env (set by cef-dll-sys build.rs) or
         // fall back to the directory containing libcef.so.
@@ -359,21 +360,23 @@ pub(crate) fn create_browser_from_url(
 ) -> Result<Browser, FrontendError> {
     let mut client = ClientBuilder::build(Arc::clone(shared));
 
-    let mut window_info = WindowInfo::default();
-    window_info.windowless_rendering_enabled = 1;
+    let mut window_info = WindowInfo {
+        windowless_rendering_enabled: 1,
+        ..Default::default()
+    };
     window_info.bounds.width = size.0 as c_int;
     window_info.bounds.height = size.1 as c_int;
 
-    let mut browser_settings = BrowserSettings::default();
-    let mut cef_url: CefStringUtf16 = url.into();
+    let browser_settings = BrowserSettings::default();
+    let cef_url: CefStringUtf16 = url.into();
 
     tracing::info!("creating CEF browser at {url} ({}x{})", size.0, size.1);
 
     cef::browser_host_create_browser_sync(
-        Some(&mut window_info),
+        Some(&window_info),
         Some(&mut client),
-        Some(&mut cef_url),
-        Some(&mut browser_settings),
+        Some(&cef_url),
+        Some(&browser_settings),
         None,
         None,
     )

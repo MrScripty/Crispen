@@ -237,10 +237,10 @@ impl CompositeBackend for CefBackend {
         *self.shared.size.lock().unwrap() = (width, height);
         tracing::info!("CEF webview resized to {width}x{height}");
 
-        if let Some(browser) = &self.browser {
-            if let Some(host) = browser.host() {
-                host.was_resized();
-            }
+        if let Some(browser) = &self.browser
+            && let Some(host) = browser.host()
+        {
+            host.was_resized();
         }
     }
 
@@ -335,10 +335,10 @@ impl CompositeBackend for CefBackend {
 impl Drop for CefBackend {
     fn drop(&mut self) {
         tracing::info!("dropping CEF webview");
-        if let Some(browser) = self.browser.take() {
-            if let Some(host) = browser.host() {
-                host.close_browser(1);
-            }
+        if let Some(browser) = self.browser.take()
+            && let Some(host) = browser.host()
+        {
+            host.close_browser(1);
         }
     }
 }

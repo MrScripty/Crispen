@@ -773,7 +773,7 @@ fn render_histogram(data: &HistogramData) -> Option<(u32, u32, Vec<u8>)> {
     let total = (width * height) as usize;
     let mut rgba = vec![0u8; total * 4];
 
-    for px in rgba.chunks_exact_mut(4) {
+    for px in rgba.as_chunks_mut::<4>().0 {
         px[0] = 8;
         px[1] = 8;
         px[2] = 10;
@@ -973,7 +973,7 @@ fn render_cie(data: &CieData, gamut: &CieChromaticity) -> Option<(u32, u32, Vec<
     let mut rgba = vec![0u8; pixel_count * 4];
 
     // Dark background fill
-    for px in rgba.chunks_exact_mut(4) {
+    for px in rgba.as_chunks_mut::<4>().0 {
         px[0] = 5;
         px[1] = 5;
         px[2] = 6;
@@ -1103,28 +1103,28 @@ pub fn update_cef_scopes(
     }
     let Some(handles) = handles else { return };
 
-    if let Some(data) = scope_state.vectorscope.as_ref() {
-        if let Some((w, h, rgba)) = render_vectorscope(data) {
-            upload_scope_texture(handles.vectorscope.clone(), &mut images, w, h, rgba);
-        }
+    if let Some(data) = scope_state.vectorscope.as_ref()
+        && let Some((w, h, rgba)) = render_vectorscope(data)
+    {
+        upload_scope_texture(handles.vectorscope.clone(), &mut images, w, h, rgba);
     }
 
-    if let Some(data) = scope_state.waveform.as_ref() {
-        if let Some((w, h, rgba)) = render_waveform(data) {
-            upload_scope_texture(handles.waveform.clone(), &mut images, w, h, rgba);
-        }
+    if let Some(data) = scope_state.waveform.as_ref()
+        && let Some((w, h, rgba)) = render_waveform(data)
+    {
+        upload_scope_texture(handles.waveform.clone(), &mut images, w, h, rgba);
     }
 
-    if let Some(data) = scope_state.histogram.as_ref() {
-        if let Some((w, h, rgba)) = render_histogram(data) {
-            upload_scope_texture(handles.histogram.clone(), &mut images, w, h, rgba);
-        }
+    if let Some(data) = scope_state.histogram.as_ref()
+        && let Some((w, h, rgba)) = render_histogram(data)
+    {
+        upload_scope_texture(handles.histogram.clone(), &mut images, w, h, rgba);
     }
 
     let output_gamut = chromaticity(grading_state.params.color_management.output_space);
-    if let Some(data) = scope_state.cie.as_ref() {
-        if let Some((w, h, rgba)) = render_cie(data, output_gamut) {
-            upload_scope_texture(handles.cie.clone(), &mut images, w, h, rgba);
-        }
+    if let Some(data) = scope_state.cie.as_ref()
+        && let Some((w, h, rgba)) = render_cie(data, output_gamut)
+    {
+        upload_scope_texture(handles.cie.clone(), &mut images, w, h, rgba);
     }
 }

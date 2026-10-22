@@ -353,6 +353,7 @@ fn dispatch_ui_message(
             }
         }
         UiToBevy::SetParams { params } => {
+            let params = *params;
             // Handle directly rather than routing through ColorGradingCommand
             // messages, which can be lost if handle_grading_commands runs before
             // handle_cef_ipc in the same frame.
@@ -509,12 +510,12 @@ fn preview_target_from_config(config: &AppConfig) -> Option<(u32, u32)> {
 /// or the project root.
 fn find_built_ui() -> Option<std::path::PathBuf> {
     // 1. Next to the executable (for packaged builds).
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let candidate = dir.join("ui/index.html");
-            if candidate.exists() {
-                return Some(candidate);
-            }
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(dir) = exe.parent()
+    {
+        let candidate = dir.join("ui/index.html");
+        if candidate.exists() {
+            return Some(candidate);
         }
     }
 

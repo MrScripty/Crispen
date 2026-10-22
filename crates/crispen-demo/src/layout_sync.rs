@@ -48,7 +48,7 @@ fn sync_panel_layout(
 
     let scale = windows
         .single()
-        .map(|w| w.scale_factor() as f32)
+        .map(|w| w.scale_factor())
         .unwrap_or(1.0);
 
     for (panel, mut node, mut vis) in &mut query {
